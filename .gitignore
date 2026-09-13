@@ -1,0 +1,9 @@
+.idea/
+*.iml
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.env
+.vscode/
+Thumbs.db
+.~lock*
