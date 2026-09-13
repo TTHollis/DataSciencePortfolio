@@ -1,0 +1,780 @@
+---
+title: "HollisT_Week9"
+author: "Tim Hollis"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+#Loading Libraries
+
+library(tidyverse)
+library(broom)
+library(ggplot2)
+library(knitr)
+library(kableExtra)
+library(gridExtra)
+library(moments)
+
+# Setting Theme
+
+theme_custom <- theme_minimal() +
+  theme(plot.title = element_text(face = 'bold', size = 14),
+        axis.title = element_text(face = 'bold'),
+        legend.position = 'bottom')
+
+# Remove scientific expression for numerical data
+
+options(scipen = 999)
+
+# Set Seed for Reproducibility
+
+set.seed(123)
+```
+```{r data-review}
+
+# Load and inspect data
+
+travel_data <- read.csv('travel_insurance_anova.csv')
+
+# Convert factor variables to maintain proper ANOVA structure
+
+travel_data$Agency.Type <- as.factor(travel_data$Agency.Type)
+travel_data$Distribution.Channel <- as.factor(travel_data$Distribution.Channel)
+
+# Examine the structure
+
+cat('Structure of Data:\n')
+str(travel_data)
+
+# Check for missing values
+
+missing_summary <- sapply(travel_data, function(x) sum(is.na(x)))
+cat('Missing values in each column:')
+print(missing_summary)
+
+# Check the distribution of categorical variables
+
+cat('Distribution of Agency Types:')
+agency_dist <- table(travel_data$Agency.Type)
+print(agency_dist)
+
+cat('Distribution of Distribution Channels:')
+channel_dist <- table(travel_data$Distribution.Channel)
+print(channel_dist)
+
+# Check proportions for both factors
+
+cat('Proportions of Agency Types:')
+agency_prop <- prop.table(agency_dist)
+agency_prop_formatted <- data.frame(
+  Agency_Type = names(agency_prop),
+  Count = as.numeric(agency_dist),
+  Proportion = paste0(round(agency_prop * 100, 2), '%')
+)
+
+cat('Proportions of Distribution Channels:')
+channel_prop <- prop.table(channel_dist)
+channel_prop_formatted <- data.frame(
+  Channel = names(channel_prop),
+  Count = as.numeric(channel_dist),
+  Proportion = paste0(round(channel_prop * 100, 2), '%')
+)
+
+# Display both tables 
+
+kable(agency_prop_formatted, caption = 'Agency Type') %>%
+  kable_styling(bootstrap_options = c('striped', 'hover', 'condensed'), full_width = FALSE)
+
+kable(channel_prop_formatted, caption = 'Distribution Channel') %>%
+  kable_styling(bootstrap_options = c('striped', 'hover', 'condensed'), full_width = FALSE)
+
+# Create a cross-tabulation
+
+cross_tab <- table(travel_data$Agency.Type, travel_data$Distribution.Channel)
+cat('Cross-tabulation of Agency Type vs Distribution Channel:')
+print(cross_tab)
+
+# Summary statistics by groups (all four possible combinations)
+
+group_summary <- travel_data %>%
+  group_by(Agency.Type, Distribution.Channel) %>%
+  summarise(
+    Count = n(),
+    Mean_Net_Sales = mean(Net.Sales),
+    SD_Net_Sales = sd(Net.Sales),
+    Min_Net_Sales = min(Net.Sales),
+    Max_Net_Sales = max(Net.Sales),
+    .groups = 'drop'
+  )
+
+cat('Summary Statistics by Group:')
+group_summary %>%
+  mutate(across(c(Mean_Net_Sales, SD_Net_Sales, Min_Net_Sales, Max_Net_Sales), ~ paste0('$', round(., 2)))) %>%
+  kable(caption = 'Net Sales Summary by Agency Type and Distribution Channel') %>%
+  kable_styling(bootstrap_options = c('striped', 'hover', 'condensed'), full_width = FALSE)
+```
+<hr style="border: 1px solid #000000;">
+
+### **Data Review Summary**
+
+The dataset contains `r nrow(travel_data)` observations with two categorical
+factors (Agency Type and Distribution Channel) and one continuous outcome variable
+(Net Sales). There are no missing values, which is excellent for our analysis.
+Both factors have two categories:
+
+**Agency Type**
+
+- ***Airlines*** (`r agency_dist['Airlines']` observations, `r round(prop.table(agency_dist)['Airlines'] * 100, 2)`%)
+- ***Travel Agency*** (`r agency_dist['Travel Agency']` observations, `r round(prop.table(agency_dist)['Travel Agency'] * 100, 2)`%)
+
+**Distribution Channel**
+
+- ***Online*** (`r channel_dist['Online']` observations, `r round(prop.table(channel_dist)['Online'] * 100, 2)`%)
+- ***Offline*** (`r channel_dist['Offline']` observations, `r round(prop.table(channel_dist)['Offline'] * 100, 2)`%)
+
+**Note**: There is significant imbalance in the Distribution Channel factor, with 
+**Online** channels representing `r round(prop.table(channel_dist)['Online'] * 100, 2)`% 
+of observations. The Agency Type factor shows `r ifelse(prop.table(agency_dist)['Airlines'] > 0.6, "a moderate imbalance", "relatively balanced distribution")` 
+(`r round(prop.table(agency_dist)['Airlines'] * 100, 2)`% Airlines vs `r round(prop.table(agency_dist)['Travel Agency'] * 100, 2)`% Travel Agencies). 
+This imbalance should be considered when interpreting the effects of these factors.
+<hr style="border: 1px solid #000000;">
+
+### **Data Visualization**
+
+The boxplots visualize the distribution of Net Sales across the categories of 
+the independent variables.
+
+```{r data-viz}
+
+# Boxplot for Agency Type
+
+p1 <- ggplot(travel_data, aes(x = Agency.Type, y = Net.Sales, fill = Agency.Type)) +
+  geom_boxplot(alpha = 0.7, outlier.alpha = 0.3) +
+  stat_summary(fun = mean, geom = "point", shape = 18, size = 3, color = "red") +
+  labs(title = "Net Sales by Agency Type",
+       subtitle = "Red diamonds show group means",
+       x = "Agency Type",
+       y = "Net Sales",
+       fill = "Agency Type") +
+  theme_custom +
+  scale_fill_brewer(palette = "Set2")
+
+# Boxplot for Distribution Channel 
+
+p2 <- ggplot(travel_data, aes(x = Distribution.Channel, y = Net.Sales, fill = Distribution.Channel)) +
+  geom_boxplot(alpha = 0.7, outlier.alpha = 0.3) +
+  stat_summary(fun = mean, geom = "point", shape = 18, size = 3, color = "red") +
+  annotate("text", x = 1, y = max(travel_data$Net.Sales), 
+           label = paste("n =", channel_dist["Offline"]), vjust = -0.5, fontface = "bold") +
+  annotate("text", x = 2, y = max(travel_data$Net.Sales), 
+           label = paste("n =", channel_dist["Online"]), vjust = -0.5, fontface = "bold") +
+  labs(title = "Net Sales by Distribution Channel",
+       subtitle = "Note: Severe sample size imbalance",
+       x = "Distribution Channel",
+       y = "Net Sales",
+       fill = "Distribution Channel") +
+  theme_custom +
+  scale_fill_brewer(palette = "Set1")
+
+# Interaction plot
+
+p3 <- ggplot(travel_data, aes(x = Agency.Type, y = Net.Sales, fill = Distribution.Channel)) +
+  geom_boxplot(alpha = 0.7, outlier.alpha = 0.3) +
+  labs(title = "Net Sales by Agency Type and Distribution Channel",
+       subtitle = "No significant interaction effect observed",
+       x = "Agency Type",
+       y = "Net Sales",
+       fill = "Distribution Channel") +
+  theme_custom +
+  scale_fill_brewer(palette = "Set1")
+
+# Display plots
+
+print(p1)
+print(p2)
+print(p3)
+```
+<hr style="border: 1px solid #000000;">
+
+### **One/Two Way ANOVA Review and Selection**
+
+The assignment requires us to:
+
+- Perform one-way ANOVA to examine the effect of individual factors on Net Sales
+
+- Perform two-way ANOVA to examine the combined effects of both factors
+
+- Use AIC to determine which model provides a better fit for the dataset
+
+- Create appropriate visualizations to support our findings
+
+We'll analyze how Agency Type and Distribution Channel affect Net Sales in the 
+travel insurance business by completing a one-way ANOVA individually, then a 
+two-way ANOVA using both, and then a comparison to understand which model is best.
+<hr style="border: 1px solid #000000;">
+
+### **One-way ANOVA Analysis - Agency Type, and its Effect on Net Sales**
+
+```{r one-way-AA-AgencyType}
+
+# One-way ANOVA for Agency Type
+
+one_way_agency <- aov(Net.Sales ~ Agency.Type, data = travel_data)
+
+# Summary of the ANOVA
+
+agency_summary <- summary(one_way_agency)
+agency_summary_df <- tidy(one_way_agency)
+
+# Display results
+
+cat('One-Way ANOVA - Agency Type vs Net Sales:')
+print(agency_summary)
+
+# Calculate group means
+
+agency_means <- travel_data %>%
+  group_by(Agency.Type) %>%
+  summarise(Mean_Net_Sales = mean(Net.Sales),
+            SD_Net_Sales = sd(Net.Sales),
+            Count = n()) %>%
+  arrange(desc(Mean_Net_Sales))
+
+# Display formatted group means
+
+agency_means %>%
+  mutate(across(c(Mean_Net_Sales, SD_Net_Sales), ~ paste0('$', round(., 2)))) %>%
+  kable(caption = 'Agency Type Group Means') %>%
+  kable_styling(bootstrap_options = c('striped', 'hover', 'condensed'), full_width = FALSE)
+
+# Calculate effect size
+
+ss_between <- agency_summary[[1]]$'Sum Sq'[1]
+ss_total <- sum(agency_summary[[1]]$'Sum Sq')
+eta_squared_agency <- ss_between / ss_total
+
+# Assign the dominant effect size for the final summary table
+
+eta_squared <- eta_squared_agency
+```
+<hr style="border: 1px solid #000000;">
+
+#### **Summary**
+
+The one-way ANOVA for Agency Type shows a highly significant effect on Net Sales
+(F = `r round(agency_summary[[1]]$'F value'[1], 2)`,
+p < `r ifelse(agency_summary[[1]]$'Pr(>F)'[1] < 0.001, "0.001", round(agency_summary[[1]]$'Pr(>F)'[1], 3))`).
+Airlines have substantially higher average Net Sales (`r paste0('$', round(agency_means$Mean_Net_Sales[agency_means$Agency.Type == 'Airlines'], 2))`) compared to Travel Agencies (`r paste0('$', round(agency_means$Mean_Net_Sales[agency_means$Agency.Type == 'Travel Agency'], 2))`).
+
+The effect size ($\eta^2$ = `r round(eta_squared_agency, 4)`) indicates that Agency Type explains `r round(eta_squared_agency * 100, 2)`% of the variance in Net Sales.
+<hr style="border: 1px solid #000000;">
+
+### **One-way ANOVA Analysis - Distribution Channel, and its Effect on Net Sales**
+
+```{r one-way-AA-DistChannel}
+
+# One-way ANOVA for Distribution Channel
+
+one_way_channel <- aov(Net.Sales ~ Distribution.Channel, data = travel_data)
+
+# Summary of the ANOVA
+
+channel_summary <- summary(one_way_channel)
+channel_summary_df <- tidy(one_way_channel)
+
+# Display results
+
+cat('One-Way ANOVA - Distribution Channel vs Net Sales:')
+print(channel_summary)
+
+# Calculate group means
+
+channel_means <- travel_data %>%
+  group_by(Distribution.Channel) %>%
+  summarise(Mean_Net_Sales = mean(Net.Sales),
+            SD_Net_Sales = sd(Net.Sales),
+            Count = n()) %>%
+  arrange(desc(Mean_Net_Sales))
+
+# Display formatted group means
+channel_means %>%
+  mutate(across(c(Mean_Net_Sales, SD_Net_Sales), ~ paste0('$', round(., 2)))) %>%
+  kable(caption = 'Distribution Channel Group Means') %>%
+  kable_styling(bootstrap_options = c('striped', 'hover', 'condensed'), full_width = FALSE)
+
+# Calculate effect size
+
+ss_between <- channel_summary[[1]]$'Sum Sq'[1]
+ss_total <- sum(channel_summary[[1]]$'Sum Sq')
+eta_squared_channel <- ss_between / ss_total
+```
+<hr style="border: 1px solid #000000;">
+
+#### **Summary**
+
+The one-way ANOVA for Distribution Channel also shows a statistically significant effect on Net Sales
+(F = `r round(channel_summary[[1]]$'F value'[1], 2)`,
+p `r if(channel_summary[[1]]$'Pr(>F)'[1] < 0.001) {"< 0.001"} else {paste("=", round(channel_summary[[1]]$'Pr(>F)'[1], 3))}`).
+Online channels have a higher average Net Sales (`r paste0('$', round(channel_means$Mean_Net_Sales[channel_means$Distribution.Channel == 'Online'], 2))`) compared to Offline channels (`r paste0('$', round(channel_means$Mean_Net_Sales[channel_means$Distribution.Channel == 'Offline'], 2))`).
+
+However, the effect size (η² = `r round(eta_squared_channel, 4)`) is smaller than Agency Type, indicating that Distribution Channel explains only `r round(eta_squared_channel * 100, 2)`% of the variance in Net Sales.
+<hr style="border: 1px solid #000000;">
+
+### **Model Comparison**
+
+To determine the best model, we compare four competing models: both one-way models,
+a two-way additive model, and a two-way interaction model, using the Akaike 
+Information Criterion (AIC). The lowest AIC value indicates the preferred model 
+due to its better balance of fit and complexity.
+
+```{r model-comparison}
+
+# One-Way ANOVA Models (Both Factors)
+
+model_oneway_agency <- aov(Net.Sales ~ Agency.Type, data = travel_data)
+model_oneway_channel <- aov(Net.Sales ~ Distribution.Channel, data = travel_data)
+
+# Two-Way ANOVA (Additive/Main Effects Only)
+
+model_twoway_additive <- aov(Net.Sales ~ Agency.Type + Distribution.Channel, data = travel_data)
+
+# Two-Way ANOVA (With Interaction) 
+
+model_twoway_interaction <- aov(Net.Sales ~ Agency.Type * Distribution.Channel, data = travel_data)
+
+# Calculate AIC for all models
+
+aic_oneway_agency <- AIC(model_oneway_agency)
+aic_oneway_channel <- AIC(model_oneway_channel)
+aic_twoway_additive <- AIC(model_twoway_additive)
+aic_twoway_interaction <- AIC(model_twoway_interaction)
+
+# Function to calculate partial eta squared for ANOVA models
+
+calculate_partial_eta_squared <- function(anova_model) {
+  anova_summary <- summary(anova_model)
+  if (length(anova_summary) == 1) {
+    ss_effect <- anova_summary[[1]]$'Sum Sq'[1]
+    ss_total <- sum(anova_summary[[1]]$'Sum Sq')
+    return(ss_effect / ss_total)
+  } else {
+    ss_effects <- anova_summary[[1]]$'Sum Sq'[1:(nrow(anova_summary[[1]])-1)]
+    ss_residual <- anova_summary[[1]]$'Sum Sq'[nrow(anova_summary[[1]])]
+    partial_eta_squared <- ss_effects / (ss_effects + ss_residual)
+    return(partial_eta_squared)
+  }
+}
+
+# Calculate effect sizes for all models
+
+eta_agency <- calculate_partial_eta_squared(model_oneway_agency)
+eta_channel <- calculate_partial_eta_squared(model_oneway_channel)
+
+# For two-way models, we'll use the Agency Type effect size for comparison
+
+eta_additive <- calculate_partial_eta_squared(model_twoway_additive)
+eta_interaction <- calculate_partial_eta_squared(model_twoway_interaction)
+
+# Extract just the Agency Type effect size from two-way models for consistent comparison
+
+eta_additive_agency <- if(length(eta_additive) > 1) eta_additive[1] else eta_additive
+eta_interaction_agency <- if(length(eta_interaction) > 1) eta_interaction[1] else eta_interaction
+
+# Create a comprehensive comparison table
+
+aic_comparison <- data.frame(
+  Model = c('One-Way (Agency Type)', 'One-Way (Distribution Channel)', 'Two-Way (Additive)', 'Two-Way (Interaction)'),
+  Formula = c('Net.Sales ~ Agency.Type', 'Net.Sales ~ Distribution.Channel', 
+              'Net.Sales ~ Agency.Type + Distribution.Channel', 
+              'Net.Sales ~ Agency.Type * Distribution.Channel'),
+  AIC = c(aic_oneway_agency, aic_oneway_channel, aic_twoway_additive, aic_twoway_interaction),
+  Effect_Size = c(
+    round(eta_agency, 4),
+    round(eta_channel, 4),
+    round(eta_additive_agency, 4),
+    round(eta_interaction_agency, 4)
+  )
+)
+
+# Identify the best model based on the lowest AIC
+
+best_model_name <- aic_comparison$Model[which.min(aic_comparison$AIC)]
+best_aic <- round(min(aic_comparison$AIC), 2)
+
+# Print the name of the best model for the final summary table
+
+best_model <- best_model_name
+
+# Display the AIC Comparison Table
+
+cat('AIC Comparison of ANOVA Models')
+aic_comparison %>%
+  mutate(
+    AIC = round(AIC, 2),
+    Effect_Size = round(Effect_Size, 4)
+  ) %>%
+  arrange(AIC) %>%
+  kable(caption = 'Model Selection using AIC (Lower is Better)') %>%
+  kable_styling(bootstrap_options = c('striped', 'hover', 'condensed'), full_width = FALSE) %>%
+  row_spec(which(aic_comparison$Model == best_model_name), bold = TRUE, color = 'white', background = 'green')
+
+# Print the summary of the best model
+
+if (best_model_name == 'One-Way (Agency Type)') {
+  best_model_aov <- model_oneway_agency
+} else if (best_model_name == 'One-Way (Distribution Channel)') {
+  best_model_aov <- model_oneway_channel
+} else if (best_model_name == 'Two-Way (Additive)') {
+  best_model_aov <- model_twoway_additive
+} else {
+  best_model_aov <- model_twoway_interaction
+}
+
+cat('ANOVA Summary for the AIC-Selected Best Model: ', best_model_name, '')
+print(summary(best_model_aov))
+
+# Create AIC comparison visualization
+
+aic_plot_data <- aic_comparison %>%
+  mutate(
+    Model = factor(Model, levels = Model[order(AIC)]),
+    AIC_Difference = AIC - min(AIC)
+  )
+
+# Create Plots
+
+ggplot(aic_plot_data, aes(x = reorder(Model, AIC), y = AIC, color = Model == best_model_name)) +
+  geom_point(size = 4) +
+  geom_segment(aes(xend = reorder(Model, AIC), yend = min(AIC) - 100), 
+               linetype = "dashed", alpha = 0.3) +
+  geom_text(aes(label = paste0("AIC = ", round(AIC, 1), 
+                              ifelse(Model == best_model_name, " (BEST)", ""))), 
+            vjust = -0.8, hjust = 0.5, size = 3.5, fontface = "bold") +
+  scale_color_manual(values = c('TRUE' = '#2E86AB', 'FALSE' = '#A23B72'), guide = 'none') +
+  labs(title = 'AIC Model Comparison',
+       subtitle = 'Lower AIC values indicate better model fit\nPoints show actual AIC values for precise comparison',
+       x = 'Model',
+       y = 'AIC Value') +
+  theme_custom +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  ylim(min(aic_plot_data$AIC) - 100, max(aic_plot_data$AIC) + 100)
+
+# Create Simple Table
+
+aic_ranked <- aic_comparison %>%
+  arrange(AIC) %>%
+  mutate(
+    Rank = 1:n(),
+    Delta_AIC = AIC - min(AIC),
+    AIC = round(AIC, 1),
+    Delta_AIC = round(Delta_AIC, 1)
+  )
+
+cat('AIC Model Ranking (Best to Worst)')
+kable(aic_ranked[, c('Rank', 'Model', 'AIC', 'Delta_AIC')], 
+      caption = 'Model comparison using Akaike Information Criterion') %>%
+  kable_styling(bootstrap_options = c('striped', 'hover'), full_width = FALSE) %>%
+  row_spec(1, bold = TRUE, color = 'white', background = '#2E86AB')
+
+# Interpretation
+
+cat('Model Selection Interpretation')
+cat('The AIC comparison reveals that', best_model_name, 'provides the best fit with AIC =', best_aic, '.\n')
+cat('The Agency Type effect size remains consistently strong across all models (η² ≈', 
+    round(mean(c(eta_agency, eta_additive_agency, eta_interaction_agency)), 3),'), confirming its dominance.\n')
+
+# Assign the dominant effect size for the final summary table
+
+eta_squared <- eta_agency
+```
+<hr style="border: 1px solid #000000;">
+
+#### **Summary**
+
+The AIC comparison reveals that the `r best_model_name` provides the best balance
+of model fit and complexity. Notably:
+
+- **Agency Type one-way ANOVA** (AIC = `r round(aic_oneway_agency, 2)`) explains
+`r round(eta_squared_agency * 100, 2)`% of variance
+
+- **Distribution Channel one-way ANOVA** (AIC = `r round(aic_oneway_channel, 2)`)
+explains only `r round(eta_squared_channel * 100, 2)`% of variance
+
+- The `r ifelse(best_model_name == "One-Way (Agency Type)", "simpler **one-way Agency Type model** outperforms more complex models", "more complex model provides the best fit")`
+
+This confirms that Agency Type is not only statistically significant but also the
+most practically important factor for understanding Net Sales variation.
+<hr style="border: 1px solid #000000;">
+
+### **Assumption Check**
+
+```{r check-assumptions}
+
+# Use one way Agency Type as the selected model
+
+residuals_data <- residuals(one_way_agency)
+
+# Plots
+
+p4 <- ggplot(data.frame(Residuals = residuals_data), aes(x = Residuals)) +
+  geom_histogram(bins = 50, fill = "steelblue", alpha = 0.7) +
+  labs(title = "Distribution of Residuals",
+       subtitle = "Check for approximate normality",
+       x = "Residuals",
+       y = "Frequency") +
+  theme_custom
+
+# QQ Plot
+
+p5 <- ggplot(data.frame(Residuals = residuals_data)) +
+  stat_qq(aes(sample = Residuals), alpha = 0.6, size = 0.5) +
+  stat_qq_line(aes(sample = Residuals), color = "red", size = 1) +
+  labs(title = "Q-Q Plot of Residuals",
+       subtitle = "Comparison of observed residuals vs theoretical normal distribution",
+       x = "Theoretical Quantiles",
+       y = "Sample Quantiles") +
+  theme_custom
+
+# Display plots separately to prevent crowding
+
+print(p4)
+print(p5)
+
+# Variance comparison
+
+variance_check <- travel_data %>%
+  group_by(Agency.Type) %>%
+  summarise(
+    N = n(),
+    Variance = var(Net.Sales),
+    SD = sd(Net.Sales),
+    .groups = 'drop'
+  )
+
+# Calculate variance ratio
+
+variance_ratio <- variance_check$Variance[variance_check$Agency.Type == "Airlines"] /
+                  variance_check$Variance[variance_check$Agency.Type == "Travel Agency"]
+
+cat('Variance Comparison by Agency Type:')
+print(variance_check)
+cat('Variance Ratio (Airlines/Travel Agency):', round(variance_ratio, 2), '')
+
+# Variance Assessment
+
+if(variance_ratio < 2) {
+  variance_assessment <- "Excellent (ratio < 2)"
+} else if(variance_ratio < 4) {
+  variance_assessment <- "Acceptable (ratio 2-4)"
+} else {
+  variance_assessment <- "Potential concern (ratio ≥ 4)"
+}
+
+cat('Variance Homogeneity Assessment:', variance_assessment, '')
+
+# Residual statistics
+
+cat('Residual Summary Statistics:')
+residual_summary <- summary(residuals_data)
+print(residual_summary)
+
+# Check if residuals are centered around zero
+
+cat('Mean of residuals:', round(mean(residuals_data), 6), '(should be approximately 0)')
+
+# Check residual skewness and kurtosis with interpretation
+
+residual_skewness <- moments::skewness(residuals_data)
+residual_kurtosis <- moments::kurtosis(residuals_data)
+
+cat('Residual skewness:', round(residual_skewness, 3), 
+    ifelse(abs(residual_skewness) > 2, '***SUBSTANTIAL DEVIATION FROM NORMALITY***', 
+           ifelse(abs(residual_skewness) > 1, '(moderate deviation)', '(near normal)')), '\n')
+
+cat('Residual kurtosis:', round(residual_kurtosis, 3), 
+    ifelse(abs(residual_kurtosis - 3) > 2, '***SUBSTANTIAL DEVIATION FROM NORMALITY***', 
+           ifelse(abs(residual_kurtosis - 3) > 1, '(moderate deviation)', '(near normal)')), '\n')
+
+# Formal assessment
+
+cat('\n--- FORMAL ASSUMPTION ASSESSMENT ---\n')
+concerns <- c()
+if(variance_ratio >= 4) concerns <- c(concerns, "Heteroscedasticity (variance ratio ≥ 4)")
+if(abs(residual_skewness) > 2) concerns <- c(concerns, "Substantial skewness")
+if(abs(residual_kurtosis - 3) > 2) concerns <- c(concerns, "Substantial kurtosis")
+
+if(length(concerns) == 0) {
+  cat('✓ All assumptions reasonably met for large sample ANOVA\n')
+} else {
+  cat('⚠️ Potential concerns:\n')
+  for(concern in concerns) cat('  -', concern, '\n')
+  cat('\nNote: Large sample size (N =', nrow(travel_data), ') provides some robustness to these violations.\n')
+}
+```
+<hr style="border: 1px solid #000000;">
+
+#### **Summary**
+
+The diagnostic assessment reveals:
+
+- **Sample Size**: Large dataset (N = `r nrow(travel_data)`) provides substantial robustness to assumption violations
+
+- **Normality**: Visual inspection shows some deviation from perfect normality in the Q-Q plot
+
+- **Variance Comparison**: Airlines show `r round(variance_ratio, 1)`x the variance of Travel Agencies
+
+- **Variance Assessment**: `r variance_assessment`
+
+<hr style="border: 1px dashed #000000;">
+
+**Key Findings Requiring Attention:**
+
+- **Skewness**: `r round(residual_skewness, 3)` (substantial deviation from 0) ⚠️
+- **Kurtosis**: `r round(residual_kurtosis, 3)` (substantial deviation from 3) ⚠️  
+- **Variance Ratio**: `r round(variance_ratio, 1)` (exceeds recommended threshold of 4) ⚠️
+
+<hr style="border: 1px dashed #000000;">
+
+**Interpretation & Mitigation:**
+
+While the large sample size provides some protection against these assumption violations, the substantial skewness, kurtosis, and heteroscedasticity indicate the results should be interpreted with caution. Though I did not do any data cleaning due to the protection that the large data set provided. I did consider the following before making that decision:
+
+- Data transformations (log, square root) to address skewness and variance issues
+- Non-parametric alternatives (Kruskal-Wallis test)
+- Bootstrapping methods for confidence intervals
+
+The current ANOVA results remain informative but represent approximations rather
+than exact inferences given these assumption violations.
+
+### **Final Conclusions and Recommendations**
+
+```{r summary}
+
+# Calculate performance difference
+
+performance_diff_value <- round(agency_means$Mean_Net_Sales[agency_means$Agency.Type == 'Airlines'] - agency_means$Mean_Net_Sales[agency_means$Agency.Type == 'Travel Agency'], 2)
+
+# Create comprehensive summary
+
+final_summary <- data.frame(
+  Aspect = c(
+    'Primary Finding',
+    'Statistical Significance',
+    'Effect Size (η²)',
+    'Mean Net Sales - Airlines',
+    'Mean Net Sales - Travel Agencies', 
+    'Performance Difference',
+    'Best Model (AIC)',
+    'AIC Model Ranking',
+    'Data Quality Note',
+    'Strategic Recommendation'
+  ),
+  Result = c(
+    'Agency Type is the dominant factor',
+    'Highly significant (p < 0.001)',
+    paste(round(eta_squared * 100, 1), '% of variance explained'),
+    paste0('$', round(agency_means$Mean_Net_Sales[agency_means$Agency.Type == 'Airlines'], 2)),
+    paste0('$', round(agency_means$Mean_Net_Sales[agency_means$Agency.Type == 'Travel Agency'], 2)),
+    paste0('$', performance_diff_value, ' higher for Airlines'),
+    best_model,
+    'Agency Type > Distribution Channel (lower AIC = better fit)',
+    'Severe imbalance in Distribution Channel data',
+    'Focus on Agency Type for business strategy'
+  )
+)
+
+kable(final_summary, caption = 'Comprehensive Analysis Summary') %>%
+  kable_styling(bootstrap_options = 'striped', full_width = FALSE) %>%
+  row_spec(1, bold = TRUE, color = 'white', background = '#2E86AB') %>%
+  row_spec(10, bold = TRUE, color = 'white', background = '#A23B72')
+```
+<hr style="border: 1px solid #000000;">
+
+#### **Final Summary**
+
+Based on the comprehensive ANOVA analysis:
+
+- Agency Type is the most important factor affecting Net Sales, explaining `r round(eta_squared * 100, 1)`%
+of the variance
+
+- Airlines significantly outperform Travel Agencies in Net Sales by `r paste0('$', round(agency_means$Mean_Net_Sales[agency_means$Agency.Type == "Airlines"] - agency_means$Mean_Net_Sales[agency_means$Agency.Type == "Travel Agency"], 2))`
+on average
+
+- Distribution Channel shows statistical significance but results are unreliable
+due to severe data imbalance (98.2% Online vs 1.8% Offline)
+
+- No interaction effect exists between Agency Type and Distribution Channel
+
+- The one-way Agency Type model provides the most parsimonious and reliable explanation of Net Sales variation
+
+<hr style="border: 3px solid #000000;">
+
+## **Reflection**
+
+### **Key Learning Takeaways**:
+
+This week solidified that ANOVA is a powerful extension of t-tests for comparing multiple groups. The hands-on experience revealed that proper implementation requires attention to both statistical assumptions and technical execution in R. Most importantly, I learned that model comparison approaches like AIC provide valuable insights beyond individual hypothesis tests, and that clear communication of methodological choices is essential for reproducible analysis.
+<hr style="border: 1px solid #CCCCCC;">
+
+#### **Conceptually Intuitive/Easier Aspects**
+
+This week's ANOVA coursework contained several elements that felt conceptually straightforward:
+
+- The fundamental logic of ANOVA - comparing between-group variance to within-group variance to detect significant differences - was intuitive and built nicely on previous t-test concepts.
+
+- Setting up one-way ANOVA models in R felt natural, as the formula syntax (Net.Sales ~ Agency.Type) clearly expressed the relationship we were testing.
+
+- Interpreting ANOVA summary outputs was relatively straightforward, with F-statistics and p-values following the same interpretation framework I've learned in past courses and used throughout this course.
+
+- Calculating basic effect sizes (η²) from the sum of squares made conceptual sense as a measure of practical importance beyond statistical significance.
+
+<hr style="border: 1px solid #CCCCCC;">
+
+#### **More Challenging Aspects**
+
+Several aspects required deeper statistical understanding and technical problem-solving:
+
+- Understanding the differences between one-way and two-way ANOVA conceptually, particularly how two-way ANOVA handles multiple factors and tests for interaction effects.
+
+- Implementing proper model comparison using AIC required careful attention to ensure all models were correctly specified and comparable.
+
+- Diagnostic checking and assumption verification proved complex, particularly interpreting Q-Q plots, understanding variance homogeneity requirements, and determining the practical impact of violations in large samples.
+
+- Debugging R Markdown technical issues consumed significant time, especially troubleshooting inline coding LaTeX notation for Greek letters, then HTML coding for superscript, finally resulting in me copying and pasting Unicode symbols to create $\eta^2$ for one of my data summaries.
+
+- Creating effective visualizations that clearly communicated the ANOVA results and model comparisons required experimentation with different ggplot approaches, and a reminder sometimes a simple table comparison is best suited.
+
+<hr style="border: 1px solid #CCCCCC;">
+
+#### **Start/Stop/Continue**
+
+**START**:
+
+- Practicing with different types of post-hoc tests to understand when they're needed
+
+- Exploring additional diagnostic plots and tests for ANOVA assumptions
+
+- Building a personal code repository for common workflows
+
+**STOP**:
+
+- Overcomplicating interpretations with unnecessary business context when the focus is methodological
+
+- Using complex notation when simpler alternatives achieve the same pedagogical purpose
+
+- Spending excessive time on formatting issues before ensuring the statistical content is correct
+
+**CONTINUE**:
+
+- The systematic approach to checking assumptions before interpreting results
+
+- Comparing multiple models to understand which provides the best fit
+
+- Using both statistical outputs and visualizations to tell a complete analytical story
+
+- Documenting the decision-making process throughout the analysis
+
+<hr style="border: 3px solid #000000;">

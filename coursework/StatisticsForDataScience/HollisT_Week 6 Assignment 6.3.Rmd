@@ -1,0 +1,301 @@
+---
+title: "HollisT_Week6 Assignment 6.3"
+author: "Tim Hollis"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```
+
+## **The P-Value Report: Social Media's Impact and a Suspicious Coin**
+
+This assignment explores hypothesis testing using Fisher’s Exact Test and visualizes the relationship between p-values and statistical significance. The goal is to reinforce understanding of null and alternative hypotheses, p-value interpretation, and the implications of one- vs. two-sided tests. We’ll also refactor a hard-coded visualization to allow dynamic p-value thresholds.
+
+### **Part I: Fisher’s Exact Test Application**
+
+**Social Media and Cognitive Ability**
+
+Excessive social media use has been hypothesized to negatively impact cognitive ability. To test this, we analyze a 2x2 contingency table comparing cognitive performance between individuals who do and do not use social media. Specifically, we test whether social media users are more likely to exhibit lower cognitive ability, making this a **one-sided hypothesis test**.
+
+
+```{r socialmedia-impact}
+
+# contingency table
+
+data <- '
+Social Lower Higher
+Y      120   1
+N      2     118
+'
+
+# Convert to matrix
+
+data_matrix <- as.matrix(read.table(textConnection(data),
+                                    header = TRUE, row.names = 1))
+
+# Run Fisher's Exact Test with a one-sided alternative hypothesis 
+
+fisher_result <- fisher.test(data_matrix, alternative = 'greater')
+
+# Display test result
+
+fisher_result
+
+# Create a summary table of key statistics
+
+critical_summary <- data.frame(
+  `Test Type` = "Fisher's Exact Test",
+  `Alternative Hypothesis` = "Social media use increases odds of lower cognitive ability",
+  `P-value` = format.pval(fisher_result$p.value, digits = 3, eps = .Machine$double.eps),
+  `Odds Ratio` = round(fisher_result$estimate, 6),
+  `95% CI Lower` = round(fisher_result$conf.int[1], 7),
+  `95% CI Upper` = round(fisher_result$conf.int[2], 7)
+)
+
+# Display summary table
+
+knitr::kable(critical_summary,
+             caption = "Summary of Fisher's Exact Test Results for Social Media Impact on Cognitive Ability",
+             align = 'c')
+```
+
+
+#### **Summary**
+
+The Fisher’s Exact Test was conducted to evaluate whether social media use increases the likelihood of lower cognitive ability. The test was run as a **one-sided analysis**, reflecting the directional hypothesis that social media use negatively impacts cognitive performance.
+
+- The p-value was **< 2.2e-16**, indicating **extremely strong evidence** against the null hypothesis.
+- The estimated odds ratio was **5808.45**, meaning the odds of lower cognitive ability were estimated to be 5,808 times greater among social media users than non-users.
+- The 95% confidence interval ranged from **705.58 to ∞**, which is entirely above 1 and confirms the significance of the result.
+
+**Conclusion:** We **reject the null hypothesis** and conclude that social media use is significantly associated with reduced cognitive ability.
+
+### **Coin Toss Fairness**
+
+Next, we evaluate whether a coin that lands on heads 95 out of 100 times is fair. The null hypothesis assumes the coin is fair, or that it has an equal probability (0.5) of landing heads or tails. We test this using a binomial test with a significance level (α) of 0.05.
+
+```{r coin-toss-fairness}
+
+# Binomial test to assess fairness of a coin that landed heads 95 out of 100 times
+
+binom.test(95, 100, p = 0.5, alternative = 'two.sided')
+```
+
+
+
+#### **Summary**
+
+The alternative hypothesis is that the coin is **not fair**, meaning the probability of heads is **not equal to 0.5**.
+
+The binomial test yields a p-value of **< 2.2e-16**, which is **extremely significant** and far below the α threshold of 0.05. This provides strong evidence against the null hypothesis.
+
+The estimated probability of heads is **0.95**, with a 95% confidence interval ranging from **0.887 to 0.984**. Since this interval does **not include 0.5**, it further supports the conclusion that the coin is biased.
+
+**Conclusion:** We **reject the null hypothesis** and conclude that the coin is **not fair**.
+
+This is a **two-sided test**, because we are testing for **any deviation** from fairness — whether the coin is biased toward heads or tails, rather than testing in a single direction.
+
+### **Part II: Visualizing Significance Regions with Dynamic P-Value**
+
+In the original Figure 10.5, the significance threshold was hard-coded at α = 0.05. To explore how statistical conclusions change across different thresholds, we refactor the code to accept any alpha level. This dynamic approach reveals how rejection regions, critical z-values, and p-value behavior evolve as α becomes more or less stringent.
+
+```{r significance-regions-dynamicp, fig.width=14, fig.height=7}
+
+# Define alpha values and colors
+
+alphas <- c(0.10, 0.05, 0.01)
+colors <- c('#E41A1C', '#377EB8', '#4DAF4A')
+
+
+# Create a data frame of critical values
+
+critical_df <- data.frame(
+  Alpha = alphas,
+  `Critical z-value` = round(abs(qnorm(alphas / 2)), 2)
+)
+
+# Display as a table
+
+knitr::kable(
+  critical_df,
+  caption = "Critical Values for Different Significance Levels (Two-Tailed Test)",
+  align = c('c', 'c')
+)
+
+# Create plotting function (to reduce code repetition)
+
+create_significance_plot <- function(alpha, color_scheme) {
+  zvals <- seq(-3, 3, length = 1001)
+  zpdf <- dnorm(zvals)
+  df1 <- data.frame(x = zvals, y = zpdf)
+  z_left <- qnorm(alpha / 2)
+  z_right <- qnorm(1 - alpha / 2)
+  mn_idx <- which.min(zvals^2)
+  pvalsL <- pnorm(zvals[1:mn_idx])
+  pvalsR <- 1 - pnorm(zvals[(mn_idx + 1):length(zvals)])
+  pvals2 <- 2 * c(pvalsL, pvalsR)
+  df2 <- data.frame(x = zvals, y = pvals2)
+  
+  # Panel A: Distribution under NULL
+  
+  fig_A <- ggplot(df1, aes(x = x, y = y)) +
+    geom_line(color = 'black') +
+    geom_ribbon(data = subset(df1, x <= z_left), aes(ymin = 0, ymax = y), 
+                alpha = 0.4, fill = color_scheme) +
+    geom_ribbon(data = subset(df1, x >= z_right), aes(ymin = 0, ymax = y), 
+                alpha = 0.4, fill = color_scheme) +
+    geom_vline(xintercept = c(z_left, z_right), color = color_scheme, 
+               linetype = 'solid', linewidth = 1, alpha = 0.7) +
+    scale_x_continuous(limits = c(-3, 3), expand = c(0, 0)) +
+    scale_y_continuous(limits = c(0, .42), breaks = NULL, expand = c(0, 0)) +
+    labs(x = '', y = 'Density') +
+    theme_classic() +
+    ggtitle(paste0('α = ', alpha)) +
+    theme(plot.title = element_text(hjust = 0.5, face = 'bold'),
+          plot.margin = margin(5, 5, 15, 5)) +
+    annotate('text', x = z_left - 0.3, y = 0.35, 
+             label = paste0('z = ', round(z_left, 2)), 
+             color = color_scheme, size = 3, fontface = 'bold') +
+    annotate('text', x = z_right + 0.3, y = 0.35, 
+             label = paste0('z = ', round(z_right, 2)), 
+             color = color_scheme, size = 3, fontface = 'bold')
+
+  # Panel B: P-value (Linear)
+  
+  fig_B <- ggplot(df2, aes(x = x, y = y)) +
+    geom_line(color = 'black') +
+    geom_ribbon(data = subset(df2, x <= z_left), aes(ymin = 0, ymax = y), 
+                alpha = 0.4, fill = color_scheme) +
+    geom_ribbon(data = subset(df2, x >= z_right), aes(ymin = 0, ymax = y), 
+                alpha = 0.4, fill = color_scheme) +
+    geom_hline(yintercept = alpha, color = 'gray50', linetype = 'dashed') +
+    geom_vline(xintercept = c(z_left, z_right), color = color_scheme, 
+               linetype = 'solid', linewidth = 1, alpha = 0.7) +
+    scale_x_continuous(limits = c(-3, 3), expand = c(0, 0)) +
+    scale_y_continuous(limits = c(0, 1.03), breaks = seq(0, 1, 0.5), expand = c(0, 0)) +
+    labs(x = '', y = 'P-value') +
+    theme_classic() +
+    ggtitle(paste0('α = ', alpha)) +
+    theme(plot.title = element_text(hjust = 0.5, face = 'bold'),
+          plot.margin = margin(15, 5, 5, 5)) +
+    annotate('text', x = 2.4, y = alpha + 0.02, label = paste0('p = ', alpha), size = 3)
+
+  # Panel C: P-value (Log)
+  
+  fig_C <- ggplot(df2, aes(x = x, y = y)) +
+    geom_line(color = 'black') +
+    geom_ribbon(data = subset(df2, x <= z_left), aes(ymin = 0, ymax = y), 
+                alpha = 0.4, fill = color_scheme) +
+    geom_ribbon(data = subset(df2, x >= z_right), aes(ymin = 0, ymax = y), 
+                alpha = 0.4, fill = color_scheme) +
+    geom_hline(yintercept = alpha, color = 'gray50', linetype = 'dashed') +
+    geom_vline(xintercept = c(z_left, z_right), color = color_scheme, 
+               linetype = 'solid', linewidth = 1, alpha = 0.7) +
+    scale_x_continuous(limits = c(-3, 3), expand = c(0, 0)) +
+    scale_y_log10(
+      limits = c(1e-3, 1.1),
+      labels = scales::trans_format('log10', scales::math_format(10^.x))
+    ) +
+    labs(x = 'Test Statistic (z)', y = 'P-value') +
+    theme_classic() +
+    ggtitle(paste0('α = ', alpha)) +
+    theme(plot.title = element_text(hjust = 0.5, face = 'bold'),
+          plot.margin = margin(15, 5, 5, 5)) +
+    annotate('text', x = 2.4, y = alpha * 0.8, label = paste0('p = ', alpha), size = 3) +
+    annotation_logticks(sides = 'l', outside = TRUE, size = 0.2) +
+    coord_cartesian(clip = 'off') +
+    theme(axis.ticks.y = element_blank())
+  
+  return(list(fig_A = fig_A, fig_B = fig_B, fig_C = fig_C))
+}
+
+
+# Generate all plots using the function
+
+all_plots <- list()
+for (i in seq_along(alphas)) {
+  plot_result <- create_significance_plot(alphas[i], colors[i])
+  all_plots[[(i-1)*3 + 1]] <- plot_result$fig_A
+  all_plots[[(i-1)*3 + 2]] <- plot_result$fig_B
+  all_plots[[(i-1)*3 + 3]] <- plot_result$fig_C
+}
+
+# Title helper function (to ensure proper visualization)
+
+title_text <- function(label) {
+  ggplot() + 
+    theme_void() +
+    geom_text(aes(0, 0, label = label), size = 6, fontface = 'bold') +
+    theme(plot.margin = margin(0, 0, 0, 0))
+}
+
+# Build 1x3 grids
+
+null_grid <- plot_grid(all_plots[[1]], all_plots[[4]], all_plots[[7]], ncol = 3, scale = 1)
+linear_grid <- plot_grid(all_plots[[2]], all_plots[[5]], all_plots[[8]], ncol = 3, scale = 1)
+log_grid <- plot_grid(all_plots[[3]], all_plots[[6]], all_plots[[9]], ncol = 3, scale = 1)
+
+# Create the main layout
+
+main_layout <- plot_grid(
+  title_text('Distribution under NULL'),
+  null_grid,
+  title_text('P-value (Linear)'),
+  linear_grid,
+  title_text('P-value (Log)'),
+  log_grid,
+  ncol = 1,
+  rel_heights = c(0.08, 0.92, 0.08, 0.92, 0.08, 0.92)
+)
+
+# Display the final output
+
+main_layout
+```
+
+
+#### **Summary**
+
+This refactored visualization allows for dynamic adjustment of the p-value threshold, revealing how significance regions evolve across different alpha levels. The accompanying table of critical z-values provides a numerical reference for each α, which is then visually reinforced by the shaded rejection regions in the plots.
+
+- **Distribution under the Null Hypothesis:**
+The shaded tails correspond directly to the critical z-values shown in the table. As α decreases, the rejection regions become smaller, requiring more extreme test statistics to reject the NULL Hypothesis.
+
+- **P-values on a Linear Scale:**
+The dashed horizontal line marks the significance threshold, while the shaded areas show where p-values fall below α. This illustrates how small changes in z can lead to large shifts in p-value interpretation.
+
+- **P-values on a Logarithmic Scale:**
+This view emphasizes the steep decay of p-values in the tails, especially for very small α levels. It’s particularly useful for understanding the strength of evidence in large-sample contexts.
+
+Together, the table and plots create a cohesive framework for understanding the relationship between statistical significance, critical values, and test statistics. The dynamic structure supports deeper exploration of hypothesis testing thresholds and the trade-offs involved in statistical decision-making
+
+
+
+# **Reflection for this assessment**
+
+This assignment provided a comprehensive practical application of hypothesis testing and the conceptual underpinnings of p-values and significance. Overall, it was a rewarding exercise that solidified my understanding, though certain parts presented distinct challenges that required deeper thinking, my first major in college was I/O Psychology and the emphasis provided on properly and ethically obtaining and presenting data, truly helped me in more ways than one, and I must thank my younger self for that as I did not struggle with the fundamentals of stastiscal analysis and it allowed me to spend a majority of my time making sure my final product was exactly what I wanted it to be including visuals!
+
+### **The Intuitive/Easier Portions:**
+
+-  **Theoretical framework of hypothesis testing:** Formulating the null and alternative hypotheses for both the social media and coin toss examples felt logical. I clearly understood that we were testing for an effect against a baseline assumption of no effect, and assumed fairness.
+
+- **Interpretation of the results was intuitive:** Once the correct test was run (which will be in my more challenging aspects reflection), the output—especially the p-values and confidence intervals—told a clear story. 
+
+### **The More Challenging Portions:**
+
+- **Correctly Specifying the Fisher's Exact Test:** My initial difficulty was a critical one. I first ran the Fisher's test without the alternative argument, this taught me to always double-check that the test's configuration in code perfectly mirrors the directional nature of the alternative hypothesis stated in the problem. Though I realized by the results that returned, something was wrong, as the responses were supporting the exact opposite of what I knew the data was showing.
+
+- **Designing the Dynamic Visualization Layout:** The second major challenge was a data visualization design choice. The refactored code could be plotted in at least two logical ways:
+
+    - **Option A:** One row for each alpha level, showing all three plot types (NULL, Linear P, Log P) for that alpha.
+
+    - **Option B:** One row for each plot type, showing all three alpha levels within that row (which is what I ultimately chose).
+
+I spent considerable time deciding between these layouts. My initial instinct was Option A, as it keeps all information for a single alpha level together. However, I realized that Option B, grouping by plot type—creates a more effective comparative analysis. It allows the viewer to easily see how the rejection regions shrink as alpha changes (in the NULL row), and how the p-value threshold shifts across alphas in the linear and log views. This layout better highlights the core lesson about the relationship between alpha, critical values, and the p-value curve.
+
+### **What I Will Stop and Continue**
+
+- **I WILL STOP:** Assuming the default settings in statistical functions are the correct ones for my specific hypothesis. I will now make a conscious habit of explicitly declaring the alternative hypothesis in every test I run when necessary.
+
+
+- **I WILL CONTINUE:** Building comprehensive summary tables (like the one for the Fisher's test) and writing detailed interpretations. I find that this practice solidifies my own understanding and creates a clear, self-contained record of the analysis and its conclusions. 

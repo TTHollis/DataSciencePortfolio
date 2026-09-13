@@ -1,0 +1,389 @@
+---
+title: "HollisT_Week5"
+author: "Tim Hollis"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+# Load required libraries
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(gridExtra)
+library(scales)
+
+# Function to format numbers without scientific notation
+format_number <- function(x) {
+  format(x, scientific = FALSE, big.mark = ',')
+}
+
+# Set ggplot2 theme globally
+theme_set(theme_minimal())
+```
+
+# Probability Theory: Modeling Uncertainty
+
+Probability theory is the mathematical framework for quantifying uncertainty. 
+It allows us to model random events, calculate expected outcomes, and simulate
+systems where chance plays a role. It helps us understand not what will happen,
+but what tends to happen over many trials.
+
+Key concepts include:
+
+- **Sample Space**: The set of all possible outcomes.
+- **Random Variables**: Variables whose values depend on chance.
+- **Probability Distributions**: Functions that assign likelihoods to outcomes.
+- **Expected Value**: The long-run average outcome, weighted by probabilities.
+
+
+### **License Plate Combinations**
+
+We need to calculate how many different license plates can be made from six 
+digits. Since each position can be any digit from 0-9, and positions are 
+independent, we use the multiplication principle of counting.
+
+```{r license-plate-combos}
+
+license_plate_combinations <- 10^6
+format_number(license_plate_combinations)
+
+# Create data that shows cumulative multiplication
+combo_data <- data.frame(
+  digits = 1:6,
+  combinations = cumprod(rep(10, 6))
+)
+
+# Add labels for each step
+combo_data$calculation <- c(
+  '10',
+  '10 × 10', 
+  '10 × 10 × 10',
+  '10 × 10 × 10 × 10',
+  '10 × 10 × 10 × 10 × 10', 
+  '10 × 10 × 10 × 10 × 10 × 10        '
+)
+
+ggplot(combo_data, aes(x = factor(digits), y = combinations)) +
+  geom_col(aes(fill = combinations), width = 0.7, alpha = 0.8) +
+  geom_point(aes(y = combinations), color = 'red', size = 3) +
+  geom_line(aes(x = digits, y = combinations), group = 1, 
+            color = 'red', linewidth = 1, alpha = 0.7) +
+  geom_text(aes(label = calculation), 
+            vjust = -0.8, size = 3, fontface = 'bold') +
+  geom_text(aes(label = scales::comma(combinations)), 
+            vjust = 1.5, size = 4, fontface = 'bold', color = 'white') +
+  scale_fill_gradient(low = 'steelblue', high = 'darkblue', 
+                      labels = scales::comma) +
+  scale_y_log10(labels = scales::comma) +  # Log scale to better show growth
+  labs(title = 'License Plate Combinations: The Multiplication Principle',
+       subtitle = 'Showing how 10 possibilities per digit multiply to create 1,000,000 total combinations',
+       x = 'Number of Digits',
+       y = 'Cumulative Combinations (Log Scale)',
+       caption = paste('Total possible license plates:', scales::comma(license_plate_combinations))) +
+  theme(legend.position = 'none',
+        plot.title = element_text(face = 'bold', size = 14),
+        plot.subtitle = element_text(color = 'gray40'))
+```
+
+
+#### **Summary**
+
+There are 10 possible digits for each of the 6 positions, so the total number of
+unique license plates is: **10⁶ = 1,000,000**
+
+
+
+### **Probability of Getting ‘Heads’ Three Times in a Row**
+
+We calculate the probability of three consecutive heads in coin flips. Each flip
+is independent with P(Heads) = 0.5, so we multiply probabilities.
+
+```{r heads-x-3}
+
+prob_heads_3 <- 0.5^3
+format_number(prob_heads_3)
+
+# Generate all possible outcomes for 3 coin flips
+coin_flips <- expand.grid(
+  flip1 = c('H', 'T'),
+  flip2 = c('H', 'T'), 
+  flip3 = c('H', 'T')
+) %>%
+  mutate(
+    outcome = paste0(flip1, flip2, flip3),
+    three_heads = ifelse(outcome == 'HHH', 'HHH (Success)', 'Other Outcomes'),
+    probability = 1/8
+  )
+
+# Create visualization
+ggplot(coin_flips, aes(x = reorder(outcome, probability), y = probability, fill = three_heads)) +
+  geom_col(alpha = 0.9) +
+  geom_text(aes(label = paste0(outcome, '\n', percent(probability))), 
+            position = position_stack(vjust = 0.5), size = 3) +
+  scale_fill_manual(values = c('HHH (Success)' = '#2E8B57', 'Other Outcomes' = 'red')) +
+  coord_flip() +
+  labs(title = 'Probability of Coin Flip Outcomes (3 Flips)',
+       subtitle = 'Highlighting P(Three Heads) = 0.125',
+       x = 'Outcome Sequence', 
+       y = 'Probability',
+       fill = 'Outcome Type') +
+  theme(legend.position = 'bottom')
+```
+
+
+#### **Summary**
+
+
+The probability of flipping heads three times in a row is:
+
+**0.5 × 0.5 × 0.5 = .0125 or 12.5%** as the visual shows, one out of 8 scenarios, 
+where the coin is tossed three times, results in HHH (3 heads)
+
+
+### **Probability of Drawing Ace of Spades then Two of Hearts**
+
+We determine the probability of drawing a specific card out of the deck, followed
+by another specific card.
+
+```{r Ace-then-2}
+
+prob_cards <- (1/52)*(1/51) 
+format_number(prob_cards)
+
+# Create visualization of the probability tree
+card_stages <- data.frame(
+  Stage = factor(c('First Draw', 'Second Draw'), levels = c('First Draw', 'Second Draw')),
+  Cards_Remaining = c(52, 51),
+  Probability = c(1/52, 1/51)
+)
+
+ggplot(card_stages, aes(x = Stage, y = Probability, group = 1)) +
+  geom_line(color = 'darkred', size = 1) +
+  geom_point(size = 3, color = 'darkred') +
+  geom_text(aes(label = paste0('1/', Cards_Remaining, '\n≈', round(Probability, 4))), 
+            vjust = -1, size = 3.5) +
+  labs(title = 'Card Drawing Probability: Ace of Spades then Two of Hearts',
+       subtitle = 'Dependent Events Without Replacement',
+       y = 'Probability of Desired Card') +
+  ylim(0, 0.03)
+```
+
+
+#### **Summary**
+
+The probability of drawing the Ace of Spades followed by the Two of Hearts is:
+
+**(1/52) × (1/51) ≈ 0.000377**
+
+This is a compound probability with no replacement. After drawing one card, only
+51 remain, which is why the probability of getting the second card is slightly 
+higher. The multiplication rule applies because both events are dependent.
+
+
+
+### **Conditional Dice Probability**
+
+Given the first die shows 6, we find the probability that the sum equals 9. 
+This is conditional probability where we only consider outcomes where the first
+die is 6.
+
+```{r prob-sum-9-given-6}
+
+prob_sum_9_given_6 <- 1/6
+format_number(prob_sum_9_given_6)
+
+# Create corrected dice outcomes table
+dice_outcomes <- data.frame(
+  second_die = 1:6,
+  sum = 6 + 1:6,
+  probability = rep(1/6, 6),  
+  is_target = ifelse(1:6 == 3, 'Sum = 9 (Success)', 'Other Sums')
+)
+
+ggplot(dice_outcomes, aes(x = factor(second_die), y = probability, fill = is_target)) +
+  geom_col(width = 0.7, alpha = 0.9) +
+  geom_text(aes(label = paste0('Die: ', second_die, '\nSum: ', sum, '\n', round(probability * 100, 1), '%')), 
+            position = position_stack(vjust = 0.5), size = 3.2, lineheight = 0.8) +
+  scale_fill_manual(values = c('Sum = 9 (Success)' = '#2E8B57', 'Other Sums' = 'red')) +
+  scale_y_continuous(labels = percent_format()) +
+  labs(title = 'Conditional Probability: Sum = 9 Given First Die = 6',
+       x = 'Second Die Value', 
+       y = 'Probability',
+       fill = 'Outcome') +
+  theme(legend.position = 'bottom')
+```
+
+
+
+#### **Summary**
+
+Given the first die shows a 6, the probability that the total equals 9 is:
+**1/6 ≈ 0.1667, or 16.67%**
+
+Only one value (3) on the second die will result in a total of 9. Since all 
+outcomes are equally likely, the conditional probability is 1 out of 6.
+
+
+### **EV: Investment Decision**
+
+```{r Investment-EV}
+
+ev_investment <- (0.3 * 70000) + (0.7*-40000)
+format_number(ev_investment)
+
+investment_data <- data.frame(
+  scenario = c('Gain $70,000', 'Lose $40,000'),
+  probability = c(0.3, 0.7),
+  value = c(70000, -40000),
+  ev_contribution = c(0.3 * 70000, 0.7 * -40000)
+)
+
+# Create comprehensive EV visualization
+p1 <- ggplot(investment_data, aes(x = scenario, y = probability, fill = value > 0)) +
+  geom_col(alpha = 0.8) +
+  geom_text(aes(label = percent(probability)), vjust = -0.5, size = 4) +
+  scale_fill_manual(values = c('TRUE' = '#2E8B57', 'FALSE' = '#DC143C')) +
+  labs(title = 'A) Outcome Probabilities',
+       x = '', y = 'Probability') +
+  theme(legend.position = 'none')
+
+p2 <- ggplot(investment_data, aes(x = scenario, y = ev_contribution, fill = value > 0)) +
+  geom_col(alpha = 0.8) +
+  geom_hline(yintercept = 0, linetype = 'dashed', color = 'black') +
+  geom_text(aes(label = paste0('$', format_number(ev_contribution))), 
+            vjust = ifelse(investment_data$ev_contribution > 0, -0.5, 1.2), 
+            size = 4) +
+  geom_text(x = 1.5, y = ev_investment, 
+            label = paste('Overall EV: $', format_number(ev_investment)), 
+            vjust = -0.5, size = 5, color = 'black', fontface = 'bold') +
+  scale_fill_manual(values = c('TRUE' = '#2E8B57', 'FALSE' = '#DC143C')) +
+  labs(title = 'B) Expected Value Contributions',
+       x = '', y = 'EV Contribution ($)') +
+  theme(legend.position = 'none') +
+  ylim(c(-50000, 30000))
+
+grid.arrange(p1, p2, ncol = 2)
+```
+
+#### **Summary**
+
+Because the result of adding a 70% chance of losing $40,000 and 30% chance of 
+gaining $70,000, comes out to a -$7,000, which as the graphic shows, is comprised
+of multiplying 70k by .3 and adding that to the value obtained when multiplying
+-40k by .7 (which results in a negative number), this would not be a wise 
+investment based solely on EV analysis.
+
+
+### **EV: Lottery Ticket**
+
+Lottery EV considers all possible prizes weighted by their probabilities, minus 
+the ticket cost. Most lotteries have negative EV, making them poor financial 
+investments
+
+```{r Lottery-EV}
+
+total_tickets <- 5000000
+
+# Calculate lottery probabilities and values
+lottery_data <- data.frame(
+  prize_tier = c('Grand Prize\n$200,000', 'Second Prize\n$1,000', 
+                 'Third Prize\n$300', 'Fourth Prize\n$10', 'No Prize\n$0'),
+  num_winners = c(1, 5, 15, 25, total_tickets - 46),
+  prize_value = c(200000, 1000, 300, 10, 0),
+  net_value = c(200000-2, 1000-2, 300-2, 10-2, -2)  # Subtracting cost of ticket
+)
+
+# Calculate probabilities and EV contributions
+lottery_data$probability <- lottery_data$num_winners / total_tickets
+lottery_data$ev_contribution <- lottery_data$probability * lottery_data$net_value
+ev_lottery <- sum(lottery_data$ev_contribution)
+
+# Create a more informative visualization
+ggplot(lottery_data, aes(x = reorder(prize_tier, probability), 
+                         y = probability, 
+                         fill = net_value)) +
+  geom_col(alpha = 0.8) +
+  geom_text(aes(label = scales::percent(probability, accuracy = 0.0001)), 
+            vjust = -0.3, size = 3) +
+  geom_text(aes(label = paste0('Net: $', net_value), 
+                y = probability/2), 
+            size = 2.8, color = 'white', fontface = 'bold') +
+  scale_fill_gradient2(low = 'red', mid = 'red', high = 'green', 
+                       midpoint = 0, name = 'Net Value') +
+  scale_y_continuous(labels = scales::percent) +
+  labs(title = 'Lottery Ticket Probability Distribution',
+       subtitle = paste('Overall Expected Value: $', round(ev_lottery, 2), 
+                       '(Loss of $', round(abs(ev_lottery), 2), 'per ticket)'),
+       x = 'Prize Tier', 
+       y = 'Probability of Winning') +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+#### **Summary**
+
+With an expected value of -$1.96, purchasing this lottery ticket represents a 
+poor financial decision. The negative value is comprised of the cost of 
+the ticket, as more than 99.99% of entries will win $0, though you cant lose
+more than the total cost of ticket.
+
+
+
+## Reflection for Week 5
+
+### Things That Were Easily Completed or Made Sense
+
+- **Markdown explanation of probability theory**: Writing the intro in Markdown 
+felt familiar and helped set the tone for the assignment. It was a good way to 
+anchor the logic before diving into calculations.
+- **License plate permutations**: Calculating the number of possible six-digit 
+combinations using basic multiplication was straightforward and reinforced 
+foundational probability concepts.
+- **Expected value for investment scenario**: Applying weighted outcomes to 
+calculate expected value made sense conceptually, and the math translated well in R
+- **Coin flip visualization**: Using ggplot2 to visualize the probability of 
+three heads in a row was a fun way to connect theory to output. The GitHub 
+examples helped scaffold the structure
+
+### Things That Were Difficult or Required Extra Thought
+
+- **Deck of cards probability**: Accounting for dependent events (drawing two 
+specific cards in sequence without replacement) required careful attention to 
+conditional probability and order of operations.
+- **Dice problem with known outcome**: Interpreting the constraint “first die 
+shows a 6” and narrowing the sample space to calculate conditional probability 
+took extra effort to model correctly.
+- **Expected value of the lottery**: Translating prize tiers and ticket volume 
+into a weighted average required multiple steps and careful attention to units 
+(e.g., subtracting ticket cost, scaling probabilities).
+- **Function chaining and readability**: Keeping R code readable while chaining
+multiple operations (e.g., mutate(), summarize(), filter()) was trickier than 
+expected, especially when debugging.
+
+### Things I Will Continue or Stop Doing Moving Forward:
+
+#### Continue:
+
+- **Using comments and Markdown for clarity**: Annotating each step helped me 
+stay organized and made the logic easier to follow when reviewing.
+- **Breaking problems into smaller parts**: Tackling complex probability 
+questions by isolating each event or outcome made the code more manageable.
+- **Visualizing where possible**: Graphs and plots helped reinforce understanding
+and made abstract concepts more tangible.
+
+#### Stop:
+
+- **Relying on intuition for probability**: I’ll be more cautious about assuming
+outcomes without calculating them — especially in multi-step or conditional scenarios.
+- **Skipping edge cases in code**: I’ll build in checks for zero probabilities, 
+missing values, or unexpected inputs to make my code more robust.
+- **Overcomplicating syntax**: I’ll aim for cleaner, more modular code instead 
+of nesting too many operations in one line.
+ 
+  
+
+

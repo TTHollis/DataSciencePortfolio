@@ -1,0 +1,598 @@
+---
+title: "HollisT_Week4"
+author: "Tim Hollis"
+date: "`r Sys.Date()`"
+output: html_document
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE,warning=FALSE,message=FALSE)
+
+#Libraries needed
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(caret)
+library(lubridate)
+library(mice)
+library(e1071)
+
+games<-read.csv('vgchartz-2024.csv')
+```
+
+### Initial Data Review
+
+```{r initial-data-review}
+
+# Initial Data Review and Structure of dataset
+
+# Dataset dimensions and column names
+cat('Dataset Dimensions:',dim(games),'\n')
+cat('Column Names:',names(games),'\n')
+
+# Preview of first few rows
+knitr::kable(head(games),caption='Preview of First Few Rows')
+
+# Structure of dataset: data types and sample values
+cat('\nStructure of dataset:\n')
+str(games)
+
+# Missing values summary: NA and empty strings
+missing_summary<- data.frame(
+  Column=names(games),
+  NA_Count=colSums(is.na(games)),
+  Empty_String_Count=colSums(games=='')
+)
+knitr::kable(missing_summary,caption='Missing Value Summary by Column')
+
+# Diagnostic: flag columns with any missing values (NA or empty string)
+cat('\nColumns with missing values (diagnostic only):\n')
+print(names(games)[colSums(is.na(games))+colSums(games=='')>0])
+```
+
+### Initial data exploration
+
+The dataset contains 64,016 rows and 14 columns, representing a
+substantial archive of video game records. Column names span metadata
+(title, console, genre, publisher, developer), performance metrics
+(critic_score, total_sales, and regional sales breakdowns), and temporal
+markers (release_date, last_update). The img column stores file paths to
+box art images, which may be useful for filtering or visual reference.
+
+A preview of the first few rows includes familiar titles such as Grand
+Theft Auto V and Call of Duty: Black Ops 3, spanning platforms like PS2,
+PS3, PS4, and Xbox 360. Sales figures are broken down by region
+(na_sales, jp_sales, pal_sales, other_sales), and critic scores are
+included for most entries, though some are missing.
+
+The structure summary confirms that most columns are character or
+numeric types. Notably, several numeric columns—including critic_score,
+total_sales, and all regional sales figures—contain a high volume of NA
+values. Additionally, some character columns such as developer,
+release_date, and last_update include missing values stored as empty
+strings ("") rather than NA.
+
+A diagnostic check flagged multiple columns with missing data. However,
+per assignment instructions, only the release_date column will be
+imputed using data simulation. Other missing values will remain
+untouched for this analysis.
+
+```{r data-transformation}
+
+# Create a copy for transformation
+games_transformed<-games
+
+# Convert release_date to Date format and identify missing values
+games_transformed$release_date<-as.Date(games_transformed$release_date)
+missing_dates<-is.na(games_transformed$release_date)
+cat('Missing release dates:',sum(missing_dates),'\n')
+
+# Convert character columns to appropriate types
+games_transformed$console<-as.factor(games_transformed$console)
+games_transformed$genre<-as.factor(games_transformed$genre)
+games_transformed$publisher<-as.factor(games_transformed$publisher)
+games_transformed$developer<-as.factor(games_transformed$developer)
+```
+
+### Preparation of data for analysis
+
+To begin the transformation process, a working copy of the dataset was
+created (games_transformed) to preserve the integrity of the original
+data. The release_date column was converted to Date format, revealing
+7,051 missing entries, which will be addressed later using data
+simulation as specified in the assignment.
+
+Several character columns—console, genre, publisher, and developer—were
+converted to factors to ensure proper handling during modeling and
+transformation. This step helps distinguish categorical variables from
+numeric ones and prevents accidental scaling or normalization of
+non-numeric data.
+
+A subset of columns containing numeric values was identified for
+transformation: critic_score, total_sales, na_sales, jp_sales,
+pal_sales, and other_sales. These variables will undergo scaling, skew
+correction, and normalization in the following steps to prepare the data
+for analysis.
+
+```{r scale-numeric-data}
+
+# Define numerical columns to scale
+numerical_cols <- c('critic_score','total_sales','na_sales','jp_sales','pal_sales','other_sales')
+
+# Apply z-score standardization
+scaled_data <- scale(games_transformed[numerical_cols])
+
+# Assign scaled columns back to the dataset with "_scaled" suffix
+for (i in seq_along(numerical_cols)) {
+  col_name <- paste0(numerical_cols[i], "_scaled")
+  games_transformed[[col_name]] <- scaled_data[, i]
+}
+
+# Preview scaled values
+scaled_preview <- games_transformed[paste0(numerical_cols, "_scaled")]
+knitr::kable(head(scaled_preview), caption = 'Scaled Numerical Columns')
+```
+
+### Results of Scaling:
+
+To prepare the dataset for analysis, all selected numerical columns were
+standardized using z-score scaling. This transformation centers each
+variable around a mean of 0 and scales it to unit variance, allowing for
+meaningful comparison across features with different units and ranges.
+
+The scaled columns include:
+
+-   critic_score
+-   total_sales
+-   na_sales
+-   jp_sales
+-   pal_sales
+-   other_sales
+
+This step ensures that variables like regional sales and critic scores
+contribute proportionally to downstream analyses, such as clustering or
+regression, without being dominated by differences in scale. The
+original dollar-based sales figures were not rounded prior to scaling,
+as preserving full precision is critical for accurate standardization.
+
+```{r fix-skewness}
+
+# Function to check and fix skewness with diagnostics
+fix_skewness<-function(data,columns){
+  for(col in columns){
+    if(col %in% names(data)&&is.numeric(data[[col]])){
+      clean_data<-na.omit(data[[col]])
+      
+      if(length(clean_data)>0){
+        original_skew<-skewness(clean_data)
+        cat('Original skewness for',col,':',round(original_skew,3),'\n')
+        
+        if(min(clean_data,na.rm=TRUE)>0){
+          # Apply log transformation for positive-skewed data
+          transformed<-log1p(data[[col]])# log1p handles zeros
+          cat('Applied log transformation to',col,'\n')
+        }else{
+          # Apply square root transformation for data with negative values
+          min_val<-min(data[[col]],na.rm=TRUE)
+          if(min_val<= 0){
+            shift<-abs(min_val)+1
+            transformed<-sqrt(data[[col]]+shift)
+            cat('Applied square root transformation with shift to',col,'\n')
+          }else{
+            transformed<-sqrt(data[[col]])
+            cat('Applied square root transformation to',col,'\n')
+          }
+        }
+        
+        # Store transformed column with suffix
+        data[[paste0(col,'_deskewed')]]<-transformed
+        
+        # Report transformed skewness
+        transformed_skew<-skewness(na.omit(transformed))
+        cat('Transformed skewness for',col,':',round(transformed_skew,3),'\n\n')
+      }
+    }
+  }
+  return(data)
+}
+
+# Apply skewness correction to sales columns
+sales_cols<-c('total_sales','na_sales','jp_sales','pal_sales','other_sales')
+games_transformed<-fix_skewness(games_transformed,sales_cols)
+
+# Set up plotting layout: 2 columns, 5 rows (one pair per variable)
+par(mfrow=c(length(sales_cols),2),mar=c(4, 4, 2, 1))
+
+# Loop through each column and plot original vs deskewed
+for(col in sales_cols){
+  original<-games_transformed[[col]]
+  transformed<-games_transformed[[paste0(col,'_deskewed')]]
+  
+  # Plot original
+  hist(original,
+       main=paste('Original',col),
+       xlab=col,
+       col='lightblue',
+       breaks=50)
+  
+  # Plot transformed
+  hist(transformed,
+       main=paste('Deskewed',col),
+       xlab=paste('Transformed',col),
+       col='lightgreen',
+       breaks=50)
+}
+```
+
+### Corrected Skew
+
+To improve the symmetry of the data distribution and prepare the dataset
+for modeling, skewness was assessed and corrected for all sales-related
+columns. A custom function was implemented to apply either logarithmic
+or square root transformations based on the characteristics of each
+variable. This function also accounted for negative or zero values by
+conditionally shifting the data before applying square root
+transformations, ensuring mathematical validity and preserving
+interpretability.
+
+The original skewness values ranged from 4.49 to 9.79, indicating strong
+right skew across all sales metrics. After transformation, skewness
+values were substantially reduced, with improvements such as:
+
+-   jp_sales: from 4.49 to 3.67
+-   na_sales: from 6.90 to 4.22
+-   pal_sales: from 9.59 to 5.85
+-   total_sales: from 8.77 to 4.61
+-   other_sales: from 9.79 to 7.64
+
+Transformed columns were stored with a \_deskewed suffix to preserve the
+original data and maintain transparency throughout the workflow. This
+naming convention supports reproducibility and allows for side-by-side
+comparison of original and transformed variables.
+
+To visually confirm the effectiveness of the deskewing process,
+histograms were generated for each sales column before and after
+transformation. The original distributions were steeply right-skewed,
+with most values concentrated near zero and long tails of high sales
+figures. After transformation, the deskewed distributions showed
+significantly improved symmetry and reduced skewness, validating the
+transformation logic and supporting the use of these variables in
+subsequent normalization and modeling steps.
+
+```{r normalize-all-unique}
+
+# Define normalization functions (UPDATED)
+min_max<-function(x)(x-min(x,na.rm=TRUE))/(max(x,na.rm=TRUE)-min(x,na.rm=TRUE))
+exp_normal<-function(x)exp(x/10)
+robust<-function(x)(x-median(x,na.rm=TRUE))/IQR(x,na.rm=TRUE)
+decimal<-function(x)x/(10^ceiling(log10(max(abs(x),na.rm=TRUE))))
+unit_vector<-function(x)x/sqrt(sum(x^2,na.rm=TRUE))
+range_scaling<-function(x)(x-min(x,na.rm=TRUE))/diff(range(x,na.rm=TRUE))
+
+# Create copy for normalized output
+games_normalized<-games_transformed
+
+# Apply unique normalization techniques to each deskewed column
+games_normalized$total_sales_norm<-min_max(games_transformed$total_sales_deskewed)
+games_normalized$na_sales_norm<-exp_normal(games_transformed$na_sales_deskewed)
+games_normalized$jp_sales_norm<-robust(games_transformed$jp_sales_deskewed)
+games_normalized$pal_sales_norm<-decimal(games_transformed$pal_sales_deskewed)
+games_normalized$other_sales_norm<-unit_vector(games_transformed$other_sales_deskewed)
+games_normalized$critic_score_norm<-range_scaling(games_transformed$critic_score)
+
+# Preview normalized columns
+knitr::kable(head(games_normalized[,grep('_norm$',names(games_normalized))]),caption='Normalized Deskewed Columns')
+
+# Verify all normalized columns have different methods
+normalization_methods<-data.frame(
+  Column=c('total_sales_norm','na_sales_norm','jp_sales_norm', 
+             'pal_sales_norm','other_sales_norm','critic_score_norm'),
+  Method=c('Min-Max','Exponential Transformation','Robust','Decimal','Unit Vector','Range Scaling')
+)
+
+print(normalization_methods)
+```
+
+### Normalized using 6 unique techniques
+
+To finalize preprocessing, each deskewed numeric column was normalized
+using a distinct technique, ensuring compliance with the requirement to
+avoid repeated methods. This step enhances comparability across features
+and prepares the data for modeling.
+
+The following normalization techniques were applied:
+
+-   total_sales_deskewed: Min-Max Scaling
+-   na_sales_deskewed: Exponential Transformation
+-   jp_sales_deskewed: Robust Scaling
+-   pal_sales_deskewed: Decimal Scaling
+-   other_sales_deskewed: Unit Vector Normalization
+-   critic_score: Range Scaling
+
+Normalized columns were stored with a \_norm suffix to preserve
+transparency and reproducibility. Missing values were retained as NA to
+avoid distortion during scaling. These variables are now fully prepared
+for downstream analysis.
+
+```{r simulate-missing-releasedates}
+
+# Function to simulate missing release dates based on similar games
+games_transformed$release_date_original <- games_transformed$release_date
+simulate_missing_dates <- function(data) {
+  
+  # Identify games with missing release dates
+  missing_idx <- which(is.na(data$release_date))
+  
+  if (length(missing_idx) == 0) {
+    return(data)
+  }
+
+  for (idx in missing_idx) {
+    current_game <- data[idx, ]
+    
+    # Broad similarity criteria
+    similar_games <- data %>%
+      filter(!is.na(release_date))
+    
+    # Level 1: Same console + publisher + genre (most specific)
+    level1_games <- similar_games %>%
+      filter(console == current_game$console,
+             publisher == current_game$publisher,
+             genre == current_game$genre)
+    
+    # Level 2: Same console + publisher (original criteria)
+    level2_games <- similar_games %>%
+      filter(console == current_game$console,
+             publisher == current_game$publisher)
+    
+    # Level 3: Same console + genre (broader)
+    level3_games <- similar_games %>%
+      filter(console == current_game$console,
+             genre == current_game$genre)
+    
+    # Level 4: Same publisher only (even broader)
+    level4_games <- similar_games %>%
+      filter(publisher == current_game$publisher)
+    
+    # Choose the best available match group
+    if (nrow(level1_games) >= 5) {
+      candidate_games <- level1_games
+    } else if (nrow(level2_games) >= 5) {
+      candidate_games <- level2_games
+    } else if (nrow(level3_games) >= 5) {
+      candidate_games <- level3_games
+    } else if (nrow(level4_games) >= 5) {
+      candidate_games <- level4_games
+    } else {
+      candidate_games <- similar_games # Fallback to all games
+    }
+    
+    if (nrow(candidate_games) > 0) {
+      # Sample from the actual dates of similar games rather than just years
+      simulated_date <- sample(candidate_games$release_date, 1)
+      
+      # Add some random variation (±90 days) to avoid exact duplicates
+      date_variation <- sample(-90:90, 1)
+      simulated_date <- simulated_date + date_variation
+      
+      # Ensure the date stays 1970 and 2024
+      simulated_date <- pmin(pmax(simulated_date, as.Date("1970-01-01")), as.Date("2024-12-31"))
+      
+      data$release_date[idx] <- simulated_date
+    } else {
+      # If no similar games, use weighted sampling from all dates (not just median)
+      all_dates <- na.omit(data$release_date)
+      if (length(all_dates) > 0) {
+        data$release_date[idx] <- sample(all_dates, 1)
+      } else {
+        # Absolute fallback - random date between 1980-2023
+        random_year <- sample(1980:2023, 1)
+        random_date <- as.Date(paste0(random_year, "-", sample(1:12, 1), "-", sample(1:28, 1)))
+        data$release_date[idx] <- random_date
+      }
+    }
+  }
+  
+  return(data)
+}
+
+# Apply date simulation
+games_transformed <- simulate_missing_dates(games_transformed)
+
+# Verify no missing dates remain
+cat('Missing dates after simulation:', sum(is.na(games_transformed$release_date)), '\n')
+
+# Create simulated_flag column
+games_transformed <- games_transformed %>%
+  mutate(simulated_flag = is.na(release_date_original))  
+
+# Extract release year
+games_transformed <- games_transformed %>%
+  mutate(release_year = year(release_date))
+
+# Plot histogram
+ggplot(games_transformed, aes(x = release_year, fill = simulated_flag)) +
+  geom_histogram(binwidth = 1, position = 'identity', alpha = 0.7) +
+  scale_fill_manual(values = c('FALSE' = '#1f77b4', 'TRUE' = '#ff7f0e'),
+                    labels = c('Original', 'Simulated')) +
+  labs(title = 'Distribution of Original vs Simulated Release Dates (Improved)',
+       x = 'Release Year',
+       y = 'Number of Games',
+       fill = 'Date Type') +
+  theme_minimal()
+
+# Check the new distribution
+cat('Simulated dates distribution:\n')
+games_transformed %>%
+  filter(simulated_flag) %>%
+  count(release_year, sort = TRUE) %>%
+  as_tibble() %>%
+  print(n = 20)
+```
+
+### Simulation and Visualization of missing release dates
+
+To fill in missing release_date values, I started with a custom
+simulation function that pulled dates based on similar games. At first,
+the logic seemed reasonable, but when I visualized the results, I
+noticed something off, nearly half of the simulated dates were landing
+in 2014. That kind of clustering didn’t match the overall distribution
+of the original data and suggested that my fallback method was relying
+too heavily on the most common year.
+
+Seeing that pattern in the histogram made it clear I needed to rethink
+the approach. I did some research on better ways to simulate missing
+values and found that hierarchical matching could help preserve more
+realistic variation. I updated the function to search for similar games
+in stages—starting with exact console-publisher-genre matches, then
+loosening to broader combinations like console-publisher or
+publisher-only. If no match was found, it would sample from the full
+dataset.
+
+Instead of assigning a fixed date, the new method pulls an actual
+release date from a similar game and adds a small random offset (±90
+days) to avoid duplicates and keep seasonal patterns. This change helped
+spread the simulated dates more naturally across decades.
+
+To check the results, I plotted a histogram comparing original and
+simulated release years. The new distribution looked much better—no more
+artificial spike, and the simulated data followed the general shape of
+the original. The visual helped me catch the issue early, and the
+research gave me a better way to fix it. Overall, the updated method
+simulated over 7,000 missing values with more realistic results.
+
+```{r final-transformations-visualized}
+
+# Define numerical columns
+numerical_cols <- c('critic_score','total_sales','na_sales','jp_sales','pal_sales','other_sales')
+
+# Create scaled and deskewed versions if not already present
+games_transformed$total_sales_scaled <- as.numeric(scale(games_transformed$total_sales))
+games_transformed$total_sales_deskewed <- log1p(games_transformed$total_sales)
+
+# Extract release years as numeric
+release_years <- as.numeric(format(games_transformed$release_date, "%Y"))
+
+# Clean critic scores for histogram (from normalized dataset)
+critic_scores_clean <- as.numeric(na.omit(games_normalized$critic_score_norm))
+
+# Set up 2x2 plotting layout
+par(mfrow = c(2, 2))
+
+# Original vs Scaled total_sales
+plot(density(na.omit(games_transformed$total_sales)), 
+     main = 'Original vs Scaled Total Sales', 
+     xlab = 'Total Sales', ylab = 'Density', col = 'blue', lwd = 2)
+lines(density(na.omit(games_transformed$total_sales_scaled)), 
+      col = 'red', lwd = 2)
+legend('topright', legend = c('Original', 'Scaled'), 
+       col = c('blue', 'red'), lwd = 2)
+
+# Original vs Deskewed total_sales
+plot(density(na.omit(games_transformed$total_sales)), 
+     main = 'Original vs Deskewed Total Sales', 
+     xlab = 'Total Sales', ylab = 'Density', col = 'blue', lwd = 2)
+lines(density(na.omit(games_transformed$total_sales_deskewed)), 
+      col = 'green', lwd = 2)
+legend('topright', legend = c('Original', 'Deskewed'), 
+       col = c('blue', 'green'), lwd = 2)
+
+# Distribution of normalized critic scores
+if (length(critic_scores_clean) > 0) {
+  hist(critic_scores_clean,
+       main = 'Normalized Critic Scores',
+       xlab = 'Score', col = 'orange', border = 'white')
+} else {
+  plot.new()
+  title(main = 'Normalized Critic Scores')
+  mtext('No valid critic scores available for plotting.', side = 3, line = 0.5, col = 'red')
+}
+
+# Release dates distribution after simulation
+hist(release_years, 
+     main = 'Simulated Release Dates Distribution', 
+     xlab = 'Year', col = 'darkorange', border = 'white', breaks = 20)
+```
+
+### Final Visualization
+
+The final R chunk consolidates all preprocessing steps into a visual
+summary, validating the impact of scaling, deskewing, and normalization.
+By comparing original and transformed distributions side by side, I
+confirmed that z-score scaling preserved the shape of the skewed sales
+data, while log-based deskewing effectively compressed extreme values.
+The histogram of normalized critic scores revealed a right-skewed
+distribution, consistent with typical review patterns.
+
+The final plot comparing original and simulated release dates showed a
+realistic temporal spread, with simulated values distributed across
+multiple decades rather than clustering around a single year. This
+confirmed that the refined simulation logic successfully captured
+broader release patterns without introducing artificial peaks.
+
+Together, these plots serve as a diagnostic checkpoint, ensuring that
+each transformation behaves as expected and supports downstream
+analysis. By pairing each visual with narrative interpretation, I
+reinforced the transparency and reproducibility of the workflow
+
+### This Week's Reflection
+
+This week’s assignment pushed me to think critically about both the
+logic and presentation of my data pipeline.
+
+#### The Intuitive / Easy to Conceptually Understand
+
+Some portions felt intuitive—especially the initial data transformations
+like converting character columns to factors and formatting release
+dates. These steps aligned well with previous workflows, and I felt
+confident applying them without much troubleshooting, even though they
+involved larger chunks of code than in prior assignments.
+
+#### The Difficult (Which Involved a Lot of Trial and Error)
+
+The more difficult portions emerged during the visualization and
+normalization stages. While I understood the purpose of scaling and
+deskewing, I ran into unexpected issues with missing values and column
+references—especially with critic_score_norm. Debugging why the
+histogram wasn’t returning any results in my final visualization
+required me to trace variable lineage across chunks and confirm which
+dataset each transformation belonged to. It was a critical reminder that
+reproducibility depends not just on clean code, but on consistent object
+management and naming.
+
+Another challenge came from the simulated release dates. I had a feeling
+my original simulated results didn’t look quite right, and once I
+visualized the distribution, it confirmed my suspicion, way too many
+dates were clustered in a single year (about 50% of the over 7000
+updates). That pushed me to research better ways to simulate missing
+values. I explored hierarchical matching and contextual sampling
+techniques, which helped me redesign the logic to pull more realistic
+dates from similar games. It took some trial and error, but the final
+version produced a much more natural spread across decades and aligned
+better with the original data.
+
+#### What I Will Change (While Continuing My Other Preference)
+
+One of the most valuable lessons I learned was about spacing and
+readability. Two personal preferences I identified early in the course
+were: (1) I prefer single tick marks over official quotation marks, and
+I’ll continue using them, except when I need to differentiate quotes
+within quotes in the same line of code; and (2) I initially avoided
+spacing altogether. I wasn’t including any spacing between code blocks,
+comments, or narrative. As the complexity grew, I realized that tightly
+packed code made it harder to debug and harder to narrate. I began
+adding intentional spacing between sections, aligning comments with
+their corresponding logic, and visually separating transformations from
+diagnostics. This small change made a big difference in clarity—not just
+for me, but I’m confident it will help anyone reviewing my work follow
+the logic and identify potential issues more easily.
+
+As I continue developing, I’ll prioritize readability alongside
+functionality. I’ve seen firsthand how spacing, structure, and modular
+chunking can turn a dense assignment into a transparent and more
+understandable workflow
+
+

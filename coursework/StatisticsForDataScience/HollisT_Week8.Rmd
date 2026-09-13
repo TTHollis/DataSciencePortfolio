@@ -1,0 +1,716 @@
+---
+title: "HollisT_Week8"
+author: "Tim Hollis"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Load required libraries
+
+library(dplyr)
+library(ggplot2)
+library(corrplot)
+library(lsa)
+library(viridis)
+library(purrr)
+
+
+# Remove scientific notation globally
+
+options(scipen = 999)  
+
+# Set global theme for all ggplot visualizations
+
+theme_set(theme_minimal())
+
+# Set global theme modifications
+
+theme_update(
+  plot.title = element_text(hjust = 0.5, face = "bold"),
+  axis.title = element_text(face = "bold"),
+  legend.position = "none"
+)
+
+# Load Dataset
+
+travel_data <- read.csv('travel_insurance.csv')
+```
+```{r data-view-clean}
+
+# Examine the initial data structure
+
+glimpse(travel_data)
+head(travel_data)
+
+cat("Rows with negative net sales:", sum(travel_data$Net.Sales < 0, na.rm = TRUE), "\n")
+cat("Rows with zero net sales:", sum(travel_data$Net.Sales == 0, na.rm = TRUE), "\n")
+cat("Rows removed due to Age > 100:", sum(travel_data$Age > 100, na.rm = TRUE), "\n")
+
+# Overlap check
+
+cat("Rows removed for both conditions:", sum(travel_data$Net.Sales <= 0 & travel_data$Age > 100, na.rm = TRUE), "\n")
+
+# Total unique rows to be removed
+
+cat("Total rows to be removed:", sum(travel_data$Net.Sales <= 0 | travel_data$Age > 100, na.rm = TRUE), "\n")
+cat("Original total rows:", nrow(travel_data), "\n")
+
+
+# Clean the data: keep only rows with Net Sales > 0 AND fix the spelling
+
+clean_data <- travel_data %>% 
+  filter(Net.Sales > 0, Age <= 100) %>% # Filtering out rows with net sales data that is not positive, and age over 100
+  rename(Commission = Commision..in.value.) # Correcting spelling of Commission
+
+
+cat("Rows after cleaning:", nrow(clean_data), "\n")
+cat("Percentage of data retained:", round(nrow(clean_data)/nrow(travel_data)*100, 2), "%\n")
+cat("Column names after cleaning:", names(clean_data), "\n")
+```
+<hr style="border: 1px solid #000000;"> 
+  
+#### **Data Integrity/Cleaning Results**
+
+Out of **63,326** total rows:
+
+- **678** entries contain negative Net Sales values, likely due to refunds, 
+cancellations, or data entry errors.
+- **1,884** entries have zero Net Sales, possibly incomplete or placeholder 
+transactions.
+- **984** entries list an age over 100, which may reflect data entry issues or 
+unrealistic values.
+- **31** entries meet more than one condition, so we subtract this overlap to 
+avoid double-counting.
+
+After removing **3,515** rows, **59,811** valid entries remain, approximately 
+**94.45%** of the original dataset. These cleaned records are suitable for analysis.
+
+<hr style="border: 3px solid #000000;">
+
+## **Assignment Overview**
+
+This week’s assignment explores two core statistical concepts: correlation and 
+confidence intervals. Using the travel insurance dataset, we’ll compute various 
+correlation metrics between variables, visualize relationships, and interpret 
+the strength and direction of associations. We’ll then shift to estimating 
+confidence intervals and t-scores for numeric features to understand variability
+and inference.
+
+<hr style="border: 1px solid #000000;">
+
+### **Correlation Coefficient Analysis**
+
+We begin by exploring the relationship between **Age** and **Net Sales** as the 
+first correlation analysis, and my original assumption is there is not going
+to be a strong correlation, I chose two variables unrelated to each other in general, 
+so will be surprised if I am incorrect.
+
+```{r basic-correlation}
+
+
+ggplot(clean_data, aes(x = Age, y = Net.Sales, color = Age)) +
+  geom_point(alpha = 0.4) +
+  scale_color_viridis_c(option = "C") +
+  labs(
+    title = "Scatterplot of Age and Net Sales",
+    x = "Age",
+    y = "Net Sales",
+    color = "Age"
+  ) +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+
+# Compute Pearson correlation between Age and Net Sales
+
+cor_age_net_sales <- cor(clean_data$Age, clean_data$Net.Sales, method = "pearson", use = "complete.obs")
+
+cor_age_net_sales
+```
+
+<hr style="border: 1px solid #000000;">
+
+#### **Summary**
+
+The computed correlation coefficient between Age and Net Sales is `r round(cor_age_net_sales, 4)`, 
+indicating a `r ifelse(abs(cor_age_net_sales) < 0.3, "weak", ifelse(abs(cor_age_net_sales) < 0.7, "moderate", "strong"))` 
+`r ifelse(cor_age_net_sales > 0, "positive", "negative")` relationship.
+
+This aligns with the initial hypothesis: Age and Net Sales are not strongly 
+associated in this dataset. The weak correlation suggests that age is not a 
+meaningful predictor of sales performance, reinforcing the assumption that 
+these variables operate independently in this context.
+
+<hr style="border: 1px solid #000000;">
+
+### **Pearson, Spearman, and Kendall Comparison**
+
+ While age provides interesting demographic insights, the relationship between 
+ **commission** structures and **sales** performance is often more directly relevant for
+ business strategy. Let's now examine how **commission** values correlate with 
+ **net sales** using multiple correlation methods to see how the Pearson, Spearman, and
+ Kendall Correlations compare when analyzing the relationship betweem those variables, that
+ I assume will be strongly positively correlated.
+ 
+```{r P-S-K}
+
+# Compute different correlation methods between Commission and Net Sales
+
+pearson_cor <- cor(clean_data$Commission, clean_data$Net.Sales, method = 'pearson', use = 'complete.obs')
+spearman_cor <- cor(clean_data$Commission, clean_data$Net.Sales, method = 'spearman', use = 'complete.obs')
+kendall_cor <- cor(clean_data$Commission, clean_data$Net.Sales, method = 'kendall', use = 'complete.obs')
+
+# Create comprehensive correlation methods table
+
+correlation_methods_table <- data.frame(
+  Correlation_Type = c('Pearson', 'Spearman', 'Kendall'),
+  Best_For_Measuring = c(
+    'Linear relationships between continuous variables',
+    'Monotonic relationships (linear or nonlinear)',
+    'Concordance and rank-based associations'
+  ),  
+  Correlation_Value = c(round(pearson_cor, 4), round(spearman_cor, 4), round(kendall_cor, 4)),
+  Strength_Interpretation = c(
+    ifelse(abs(pearson_cor) < 0.3, 'Weak', ifelse(abs(pearson_cor) < 0.7, 'Moderate', 'Strong')),
+    ifelse(abs(spearman_cor) < 0.3, 'Weak', ifelse(abs(spearman_cor) < 0.7, 'Moderate', 'Strong')),
+    ifelse(abs(kendall_cor) < 0.3, 'Weak', ifelse(abs(kendall_cor) < 0.7, 'Moderate', 'Strong'))
+  )
+)
+
+# Display the table
+
+knitr::kable(correlation_methods_table, caption = 'Commission and Net Sales: Comparison of Correlation Methods')
+```
+
+<hr style="border: 1px solid #000000;">
+
+#### **Summary**
+
+All three correlation methods reveal a `r ifelse(mean(c(pearson_cor, spearman_cor, kendall_cor)) > 0.7, "strong", "moderate")` positive relationship between Commission and Net Sales. The Pearson correlation (`r round(pearson_cor, 4)`) suggests the strongest linear association, while Spearman and Kendall confirm that the relationship holds across ranked and monotonic patterns.
+
+This supports the hypothesis that higher commissions are closely tied to higher 
+net sales, a finding that aligns with business logic and reinforces the importance of 
+incentive structures in sales performance.
+
+<hr style="border: 1px solid #000000;">
+
+### **Correlation Matrix for All Variables**
+
+Now that we've established strong commission-sales relationships, let's expand our view to examine
+how all numeric variables interact by creating a comprehensive correlation matrix.
+
+```{r correlation-matrix-all}
+
+# Select only numeric variables for correlation matrix
+
+numeric_data <- clean_data %>% 
+  select(where(is.numeric)) %>% 
+  select(-matches('NA', ignore.case = TRUE))
+
+# Compute correlation matrix
+
+correlation_matrix <- cor(numeric_data, use = 'complete.obs')
+
+# Create visualization with values in boxes
+
+corrplot(correlation_matrix, method = 'color', type = 'upper', 
+         order = 'hclust', tl.cex = 0.8, tl.col = 'black',
+         title = 'Correlation Matrix of Numeric Variables',
+         mar = c(0, 0, 1, 0),
+         addCoef.col = 'black',
+         number.cex = 0.7,
+         col = colorRampPalette(c('#2166ac', '#f7f7f7', '#b2182b'))(100))
+
+# Display top correlations excluding self-correlations and duplicates
+
+correlation_pairs <- which(correlation_matrix > 0.3 & correlation_matrix < 1, arr.ind = TRUE)
+key_relationships <- data.frame(
+  Variable_1 = rownames(correlation_matrix)[correlation_pairs[, 1]],
+  Variable_2 = colnames(correlation_matrix)[correlation_pairs[, 2]],
+  Correlation = round(correlation_matrix[correlation_pairs], 3)
+) %>% 
+  filter(Variable_1 < Variable_2) %>% 
+  arrange(desc(Correlation))
+
+# Get strongest unique relationships
+
+top_relationships <- head(key_relationships, 3)
+
+knitr::kable(top_relationships, caption = 'Strongest Variable Relationships (Correlation > 0.3)')
+```
+
+<hr style="border: 1px solid #000000;">
+
+#### **Summary**
+
+The correlation matrix reveals `r nrow(top_relationships)` strong relationships 
+between numeric variable pairs. The strongest correlation is between `r top_relationships$Variable_1[1]` 
+and `r top_relationships$Variable_2[1]`, with a value of `r top_relationships$Correlation[1]`.
+
+This confirms the earlier hypothesis: **Net Sales** and **Commission** are tightly linked, 
+forming the most robust relationship in the dataset. The matrix also highlights 
+other meaningful associations worth exploring in future analyses, such as duration or age-based patterns.
+
+<hr style="border: 1px solid #000000;">
+
+### **Covariance: Commission and Net Sales**
+
+Beyond correlation, understanding how variables co-vary provides additional insights 
+into their relationships. Let's compute the covariance between Commission and Net Sales.
+
+```{r cov-commission-netsales}
+
+# Compute covariance between Commission and Net Sales
+
+cov_commission_net_sales <- cov(clean_data$Commission, clean_data$Net.Sales, use = 'complete.obs')
+
+# Create covariance summary
+
+covariance_summary <- data.frame(
+  Variable_1 = 'Commission',
+  Variable_2 = 'Net Sales',
+  Covariance = round(cov_commission_net_sales, 2),
+  Interpretation = ifelse(cov_commission_net_sales > 0, 
+                        'Positive relationship: variables move together',
+                        'Negative relationship: variables move oppositely'),
+  Magnitude = ifelse(abs(cov_commission_net_sales) > 1000, 'Large', 
+                    ifelse(abs(cov_commission_net_sales) > 100, 'Moderate', 'Small'))
+)
+
+knitr::kable(covariance_summary, caption = 'Covariance Analysis: Commission and Net Sales')
+```
+
+<hr style="border: 1px solid #000000;">
+
+#### **Summary**
+
+The covariance of `r round(cov_commission_net_sales, 2)` indicates a `r ifelse(cov_commission_net_sales > 0, 'positive', 'negative')` relationship with `r ifelse(abs(cov_commission_net_sales) > 1000, 'large', ifelse(abs(cov_commission_net_sales) > 100, 'moderate', 'small'))` magnitude, confirming that Commission and Net Sales tend to move together.
+
+<hr style="border: 1px solid #000000;">
+
+### **Cosine Similarity between Commission and Net Sales**
+
+Finally, let's compute cosine similarity to measure the angular relationship.
+
+```{r Cosine-Commission-NetSales}
+
+# Clean and select relevant columns
+
+comm_net_clean <- clean_data %>%
+  select(Commission, Net.Sales) %>%
+  na.omit()
+
+# Compute correlation metrics
+
+pearson_cor <- cor(comm_net_clean$Commission, comm_net_clean$Net.Sales, method = 'pearson')
+spearman_cor <- cor(comm_net_clean$Commission, comm_net_clean$Net.Sales, method = 'spearman')
+kendall_cor <- cor(comm_net_clean$Commission, comm_net_clean$Net.Sales, method = 'kendall')
+
+# Manual cosine similarity calculation 
+
+x <- comm_net_clean$Commission
+y <- comm_net_clean$Net.Sales
+
+# Remove any infinite or NA values
+
+x <- x[is.finite(x) & is.finite(y)]
+y <- y[is.finite(x) & is.finite(y)]
+
+# Calculate cosine similarity manually
+
+cosine_value <- sum(x * y) / (sqrt(sum(x^2)) * sqrt(sum(y^2)))
+
+# Display result
+
+round(cosine_value, 4)
+```
+
+<hr style="border: 1px solid #000000;">
+
+#### **Summary**
+
+The cosine similarity between **Commission** and **Net Sales** is approximately
+`r round(cosine_value, 4)`, indicating a strong directional alignment. This 
+suggests that when net sales increase, commission values tend to increase in a 
+consistent pattern, even if their absolute magnitudes differ.
+
+Unlike correlation, cosine similarity focuses on the angle between vectors 
+rather than their scale, making it especially useful when comparing 
+proportional trends across variables.
+
+<hr style="border: 1px solid #000000;">
+
+#### **Scatterplot and Similarity Comparison**
+
+```{r similarity-plot}
+
+# Create a similarity comparison data frame
+
+similarity_scores <- data.frame(
+  Method = c('Pearson', 'Spearman', 'Kendall', 'Cosine'),
+  Score = c(pearson_cor, spearman_cor, kendall_cor, cosine_value)  
+)
+
+# Show Columns in decending order
+
+similarity_scores$Method <- factor(similarity_scores$Method, levels = similarity_scores$Method[order(similarity_scores$Score, decreasing = TRUE)])
+
+# Plot similarity scores
+
+ggplot(similarity_scores, aes(x = Method, y = Score, fill = Method)) +
+  geom_col(width = 0.6, show.legend = FALSE) +
+  geom_text(aes(label = round(Score, 3)), vjust = -0.5, size = 4.5) +
+  ylim(0, 1) +
+  labs(
+    title = 'Similarity Metrics: Commission and Net Sales',
+    x = 'Method',
+    y = 'Similarity Score'
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = 'bold'),
+    axis.title = element_text(face = 'bold')
+  )
+```
+
+<hr style="border: 1px solid #000000;">
+
+#### **Summary: Comparing Similarity Metrics**
+
+This analysis compares four similarity measures between **Commission** and **Net Sales**:
+
+- **Pearson** captures linear correlation.
+- **Spearman** and **Kendall** assess rank-based monotonic relationships.
+- **Cosine similarity** evaluates directional alignment between vectors.
+
+In this case:
+
+- Cosine similarity (`r round(cosine_value, 3)`) was notably strong, suggesting
+proportional alignment.
+
+- Pearson (`r round(pearson_cor, 3)`) confirmed a linear relationship.
+
+- Spearman (`r round(spearman_cor, 3)`) and Kendall (`r round(kendall_cor, 3)`) 
+showed consistent rank-order association.
+
+Cosine adds a complementary perspective by focusing on **vector orientation**, 
+not just value distribution.
+
+<hr style="border: 1px solid #000000;">
+
+### **Comparison of All Discussed Measures of Similarity**
+
+A combined view of the measurements of correlation, similarity, direction, etc.
+for Sales and Commission variables.
+
+```{r all-in-comparison}
+
+# Create comparison table of all similarity measures
+
+similarity_comparison <- data.frame(
+  Method = c('Pearson', 'Spearman', 'Kendall', 'Cosine', 'Covariance'),
+  Value = c(pearson_cor, spearman_cor, kendall_cor, cosine_value, cov_commission_net_sales), 
+  Measurement_Type = c('Correlation', 'Correlation', 'Correlation', 'Similarity', 'Covariance'),
+  Best_For = c(
+    'Linear relationships',
+    'Monotonic relationships', 
+    'Rank concordance',
+    'Angular similarity',
+    'Joint variability'
+  )
+) %>% mutate(Value = round(Value, 4))
+
+knitr::kable(similarity_comparison, caption = 'Comparison of All Similarity Measures: Commission and Net Sales')
+```
+
+<hr style="border: 1px solid #000000;">
+
+#### **Summary**
+
+Across all measures, including **Pearson**, **Spearman**, **Kendall**, 
+**cosine similarity**, and **covariance**, we observe consistently strong 
+positive associations between **Net Sales** and **Commission**.
+
+This convergence across statistical and geometric metrics reinforces the 
+reliability of their relationship. Whether viewed through linear correlation, 
+rank concordance, angular similarity, or joint variability, the connection 
+between these two variables remains robust — a key insight for incentive modeling
+and sales strategy.
+
+<hr style="border: 1px solid #000000;">
+
+### **Confidence Intervals Analysis**
+
+Having completed our correlation analysis, let's now shift to confidence intervals 
+to understand the precision and reliability of our numeric feature estimates, 
+beginning with the average Confidence Interval (CI) for each numeric variable.
+
+```{r avg-ci}
+
+# Define the compute_ci function 
+
+compute_ci <- function(x, confidence = 0.95) {
+  if (length(na.omit(x)) < 2) return(c(NA, NA, NA))
+  
+  n <- length(na.omit(x))
+  mean_val <- mean(x, na.rm = TRUE)
+  se <- sd(x, na.rm = TRUE) / sqrt(n)
+  t_value <- qt((1 + confidence) / 2, df = n - 1)
+  margin_error <- t_value * se
+  
+  return(c(
+    lower = mean_val - margin_error,
+    mean = mean_val,
+    upper = mean_val + margin_error
+  ))
+}
+
+# Compute CIs for all numeric variables using map_df
+
+ci_results <- map_df(names(numeric_data), function(col_name) {
+  ci <- compute_ci(numeric_data[[col_name]])
+  data.frame(
+    Variable = col_name,
+    Mean = ci['mean'],
+    CI_Lower = ci['lower'],
+    CI_Upper = ci['upper'],
+    CI_Width = ci['upper'] - ci['lower']
+  )
+})
+
+# Create comprehensive precision table 
+
+precision_table <- ci_results %>%
+  mutate(
+    Mean = round(Mean, 2),
+    CI_Lower = round(CI_Lower, 2),
+    CI_Upper = round(CI_Upper, 2),
+    CI_Width = round(CI_Width, 2),
+    Relative_Precision = round((CI_Width / Mean) * 100, 1),
+    Precision_Rating = case_when(
+      Relative_Precision < 1 ~ 'Very High',
+      Relative_Precision < 3 ~ 'High',
+      Relative_Precision < 5 ~ 'Medium',
+      TRUE ~ 'Low'
+    )
+  ) %>%
+  select(Variable, Mean, CI_Lower, CI_Upper, CI_Width, Relative_Precision, Precision_Rating)
+
+# Display precision table
+
+knitr::kable(precision_table, caption = 'Precision Analysis: 95% Confidence Intervals for Numeric Variables')
+```
+
+<hr style="border: 1px solid #000000;">
+
+#### **Summary**
+
+Precision ratings are based on relative precision (CI width as a percentage of the mean):
+
+- **Very High**: < 1%
+- **High**: 1–3%
+- **Medium**: 3–5%
+- **Low**: > 5%
+
+The 95% confidence intervals (CI's) for each numeric variable reveal the 
+precision of their mean estimates. Narrower intervals and lower relative 
+precision indicate greater reliability and less variability in the data.
+
+- **Age** exhibits the highest precision, with a relative precision of **0.6%**,
+suggesting a highly stable mean estimate.
+
+- **Net Sales** also shows high precision at **1.8%**, reinforcing its reliability.
+
+- **Duration** and **Commission** fall into the medium precision range (~**3.3%**),
+indicating slightly more variability but still acceptable consistency.
+
+Overall, two variables (Age and Net Sales) demonstrate high or very high 
+precision, while the remaining two are close behind — reinforcing the dataset’s 
+overall quality and suitability for inferential analysis.
+
+<hr style="border: 1px solid #000000;">
+
+### **T-Scores**
+
+Now let's compute t-scores to determine the statistical significance of each numeric 
+feature's mean value.
+
+```{r t-scores}
+
+# Define the compute_t_scores function (without p-values)
+
+compute_t_scores <- function(x) {
+  if (length(na.omit(x)) < 2) return(NA)
+  
+  mean_val <- mean(x, na.rm = TRUE)
+  se <- sd(x, na.rm = TRUE) / sqrt(length(na.omit(x)))
+  t_score <- mean_val / se
+  
+  return(t_score)
+}
+
+# Compute t-scores for all numeric variables
+
+t_score_results <- data.frame(
+  Variable = names(numeric_data),
+  T_Score = sapply(numeric_data, compute_t_scores),
+  Mean_Value = sapply(numeric_data, function(x) mean(x, na.rm = TRUE)),
+  Standard_Error = sapply(numeric_data, function(x) sd(x, na.rm = TRUE) / sqrt(length(na.omit(x))))
+) %>% mutate(
+  T_Score = round(T_Score, 2),
+  Mean_Value = round(Mean_Value, 2),
+  Standard_Error = round(Standard_Error, 4),
+  Reliability = case_when(
+    abs(T_Score) > 100 ~ "Very High",
+    abs(T_Score) > 50 ~ "High", 
+    abs(T_Score) > 10 ~ "Medium",
+    TRUE ~ "Low"
+  )
+)
+
+# Display t-score results
+
+knitr::kable(t_score_results, caption = 'T-scores and Estimate Reliability Analysis')
+```
+
+<hr style="border: 1px solid #000000;">
+
+#### **Final Summary**
+
+This analysis explored the relationships, variability, and statistical 
+significance of key numeric features in the travel insurance dataset using a 
+multi-method approach:
+
+**Correlation & Similarity**
+
+- **Net Sales** and **Commission** showed consistently strong positive 
+relationships across all correlation methods (Pearson, Spearman, Kendall),
+with a cosine similarity of **0.79**, reinforcing their directional alignment.
+
+- **Age** and **Net Sales** showed a weak correlation, confirming the assumption 
+that age is not a strong predictor of sales performance.
+
+**Covariance & Cosine**
+
+- The positive **covariance** between **Net Sales** and **Commission** confirmed 
+their tendency to increase together.
+
+- **Cosine similarity** added a geometric perspective, showing that the two 
+variables move in the same direction even if their scales differ.
+
+**Confidence Intervals & Precision**
+
+- **Age** had the tightest confidence interval and lowest relative precision, 
+indicating the most stable mean estimate.
+
+- **Net Sales** also demonstrated high precision, while **Duration** and **Commission** 
+were slightly more variable but still reliable.
+
+- All variables had **95% confidence intervals** that support the robustness of
+their mean estimates.
+
+**T-Scores & Significance**
+
+- All four variables had very high t-scores, indicating that their means are 
+statistically significant and practically meaningful.
+
+- **Age** again stood out with a t-score over **900**, reinforcing its stability
+and precision.
+
+<hr style="border: 2px solid #000000;">
+
+## **Reflection for Week 8**
+
+<hr style="border: 1px solid #000000;">
+
+### **Intuitive and Successful Components**
+
+- Correlation coefficients between commission and net sales proved highly intuitive,
+with the strong positive relationship clearly demonstrating that higher commissions 
+correlate with increased sales performance
+
+- Multiple correlation methods (Pearson, Spearman, Kendall) provided complementary
+perspectives that reinforced the same business insight from different statistical angles
+
+- Data cleaning was straightforward once recognizing that negative and zero net 
+sales values represented invalid business cases requiring removal
+
+- Cosine similarity calculations, while mathematically complex, produced results 
+that aligned with correlation findings, validating the overall analysis approach
+
+<hr style="border: 1px solid #000000;">
+
+#### **Technical Successes**:
+
+- Pushed myself to do more inline R code in R Markdown to dynamically reference 
+calculated values with the tick marks at beginning of any inline calculation like the
+***r round(cor_age_net_sales, 3)*** using the calculated values to show correlation 
+between age and sales etc. instead of manually typing out the value
+
+- Pushed myself to integrate if/elif type statements that complimented my recent
+Python learnings
+
+- Used HTML coding in R Makdown to create thicker borders between concepts, than 
+the 3 dashes create
+
+<hr style="border: 1px solid #000000;">
+
+### **Challenging and Less Intuitive Aspects**
+
+- Confidence interval visualizations proved counterproductive when comparing 
+variables with different scales, as the graph attempted to display incomparable
+metrics on a single axis
+
+- Statistical significance interpretation required careful consideration of what 
+constitutes meaningful business impact versus mathematical significance
+
+- Correlation matrix interpretation initially overwhelmed with information until
+focusing on the strongest relationships through filtering and ranking
+
+<hr style="border: 1px solid #000000;">
+
+#### **Technical Difficulties**:
+
+- Debugging inline R Markdown syntax errors, particularly with proper backtick 
+placement around dynamic values
+
+- Selecting appropriate color schemes for correlation matrices that maintained 
+readability while conveying meaningful color coding
+
+- R Studio continued to get stuck at roughly the 64% knit completion, until I
+realized I was using an incorrect command to calculate cosine similarity and then
+manually calculated the relevant values
+
+<hr style="border: 1px solid #000000;">
+
+### What I will Stop, and What I will Continue Doing:
+
+<hr style="border: 1px solid #000000;">
+
+**STOP**:
+
+- Creating misleading visualizations that compare variables with fundamentally 
+different scales and units
+
+- Overcomplicating analyses with unnecessary visualizations when clear tables suffice
+
+- Using inline R code just for the sake of using inline code, using it when it adds
+value dynamically, but typing a direct value when it does not.
+
+<hr style="border: 1px solid #000000;">
+
+**Continue**:
+
+- Using multiple correlation methods to validate relationship findings from 
+different statistical perspectives
+
+- Implementing comprehensive data cleaning pipelines that document record removal 
+rationale
+
+- Creating clear, business-focused interpretations of statistical results
+
+- Leveraging R Markdown's dynamic reporting capabilities to create reproducible analyses
+
+<hr style="border: 3px solid #000000;">
+

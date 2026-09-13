@@ -1,0 +1,695 @@
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+# Loading Libraries
+
+library(tidyverse)
+library(broom)
+library(ggplot2)
+library(gridExtra)
+library(car)
+library(moments)
+
+# Creating Visual Consistency
+
+options(repr.plot.width = 7, repr.plot.height = 5)
+theme_set(theme_minimal())
+
+# Suppress significance stars
+
+options(show.signif.stars = FALSE)
+
+# Helper functions
+
+format_p <- function(p, digits = 4, eps = 1e-12) {
+  format.pval(p, digits = digits, eps = eps)
+}
+rmse <- function(model) sqrt(mean(residuals(model)^2))
+mse  <- function(model) mean(residuals(model)^2)
+```
+<hr style='border: 3px solid #000000;'>
+
+## **Housing Price Prediction Using Regression Analysis**
+
+This analysis applies statistical correlation, multiple regression, and R programming to develop predictive models for estimating housing sale prices. The primary objective is to build and compare regression models that accurately infer sale prices based on property characteristics.
+
+**Methodology**
+
+I will approach this analysis through two modeling strategies:
+
+- **Simple Linear Regression**
+  - A baseline model using only area as the predictor variable to establish foundational performance.
+  
+
+- **Multiple Regression**
+  - A comprehensive model incorporating structural features, comfort amenities, and prestige indicators to improve predictive accuracy and interpretability.
+  
+**Analysis Roadmap**
+
+- Build and evaluate two regression models:
+  - **Model 1**: Simple linear regression using area to predict price
+  - **Model 2**: Multiple regression incorporating structural, comfort, and status features
+- Conduct residual analysis, normality checks, and assumption validation for both models
+- Use ANOVA to determine whether the multiple regression model significantly improves upon the simple linear model
+
+**Key Metrics for Evaluation**
+
+- **R² and Adjusted R²**: Variance explained by the model
+- **RMSE and MSE**: Prediction accuracy
+- **Residual Analysis**: Assumption validation and bias detection
+- **Statistical Significance**: ANOVA for model comparison
+- **Variable Significance**: p-values and coefficients to assess predictor importance
+
+<hr style='border: 1px solid #000000;'>
+
+```{r data transformation}
+
+# Load housing data
+
+housing <- read_csv('Housing.csv')
+
+# Convert categorical variables to factors
+
+housing <- housing %>%
+  mutate(across(c(mainroad, guestroom, basement, hotwaterheating,
+                  airconditioning, prefarea, furnishingstatus), as.factor))
+
+# Apply transformations and engineer new variables
+
+housing <- housing %>%
+  mutate(
+    log_price = log(price),
+    log_area = log(area),
+    total_rooms = bedrooms + bathrooms +
+                  ifelse(guestroom == 'yes', 1, 0) +
+                  ifelse(basement == 'yes', 1, 0),
+    comfort_index = ifelse(hotwaterheating == 'yes', 1, 0) +
+                    ifelse(airconditioning == 'yes', 1, 0) +
+                    case_when(
+                      furnishingstatus == 'furnished' ~ 2,
+                      furnishingstatus == 'semi-furnished' ~ 1,
+                      furnishingstatus == 'unfurnished' ~ 0
+                    ),
+    status_index = ifelse(prefarea == 'yes', 1, 0) +
+                   parking +
+                   ifelse(mainroad == 'yes', 1, 0) +
+                   stories,
+    status_x_comfort = status_index * comfort_index
+  )
+
+# Standardize continuous predictors
+
+housing <- housing %>%
+  mutate(
+    z_area   = scale(area)[, 1],
+    z_rooms  = scale(total_rooms)[, 1],
+    z_status = scale(status_index)[, 1],
+    z_comfort= scale(comfort_index)[, 1]
+  )
+
+# Factor ordering for furnishingstatus
+
+housing <- housing %>%
+  mutate(
+    furnishingstatus = fct_relevel(furnishingstatus, 'unfurnished', 'semi-furnished', 'furnished')
+  )
+
+# Check variable ranges
+
+cat('=== VARIABLE RANGES ===\n')
+cat('Total Rooms range:', range(housing$total_rooms), '\n')
+cat('Comfort Index range:', range(housing$comfort_index), '\n')
+cat('Status Index range:', range(housing$status_index), '\n')
+```
+<hr style='border: 1px solid #000000;'>
+
+#### **Data Transformation Summary**
+
+To enhance model performance and interpretability, the following transformations were applied:
+
+**Skewness Correction**
+
+- Log transformations were applied to price and area to reduce right skewness and meet linearity assumptions.
+
+**Derived Variables**
+
+- ***total_rooms***: Sum of bedrooms, bathrooms, guestroom, and basement, representing spatial utility.
+- ***comfort_index***: Captures essential livability features (hotwaterheating, airconditioning, furnishingstatus). Range: 0–4.
+- ***status_index***: Captures prestige and social signaling features (prefarea, parking, mainroad, stories). Range: 1–9+.
+- ***status_x_comfort***: Interaction term reflecting the interplay between livability and prestige.
+
+**Standardization**
+
+Continuous predictors were standardized (z-scores) to improve comparability and stability of coefficients.
+
+**Categorical Encoding**
+
+All categorical variables were converted to factors, with unfurnished set as the baseline for furnishingstatus.
+
+<hr style='border: 1px solid #000000;'>
+
+```{r Transformation-Visuals}
+
+# Price distributions
+
+p1 <- ggplot(housing, aes(x = price)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 30, fill = 'orange', color = 'black') +
+  geom_density(color = 'red', linewidth = 0.8) +
+  labs(title = 'Price distribution', x = 'Price')
+
+p2 <- ggplot(housing, aes(x = log_price)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 30, fill = 'darkblue', color = 'black') +
+  geom_density(color = 'red', linewidth = 0.8) +
+  labs(title = 'Log(price) distribution', x = 'Log(price)')
+
+# Scatter Plot for Model 1 (log_price vs log_area)
+
+p3 <- ggplot(housing, aes(x = log_area, y = log_price)) +
+  geom_point(alpha = 0.6, color = 'darkblue') +
+  geom_smooth(method = 'lm', col = 'red', se = FALSE) +
+  labs(title = 'Relationship: Log(price) vs Log(area)',
+       x = 'Log of Area', y = 'Log of Price')
+
+print(p1)
+print(p2)
+print(p3)
+```
+
+#### **Interpretation of Transformations**
+
+The distribution plots confirm that applying a log transformation to ***price*** and ***area*** reduces skewness and produces variables that better align with linear regression assumptions. The scatter plot of ***log(price)*** versus ***log(area)*** shows a clear positive relationship, suggesting that area is a meaningful predictor of housing price.  
+
+These findings justify proceeding with a simple linear regression model using **log(area)** to infer **log(price)**. This baseline model will establish foundational performance metrics and provide a benchmark for evaluating the added explanatory value of more complex predictors in subsequent models.
+
+### **Simple Linear Regression: Area → Price**
+
+To begin, we'll explore how well ***area*** alone predicts ***price*** using a simple linear regression model with log‑transformed variables to meet statistical assumptions.
+
+```{r linreg-area-price}
+
+# Fit simple linear regression using log-transformed variables
+
+model1 <- lm(log_price ~ log_area, data = housing)
+
+# Display model summary
+
+cat('=== SIMPLE LINEAR REGRESSION RESULTS ===\n')
+summary(model1)
+
+# Calculate additional model metrics
+
+model1_mse <- mean(model1$residuals^2)
+model1_rmse <- sqrt(model1_mse)
+
+cat('\n=== ADDITIONAL MODEL METRICS ===\n')
+cat('Mean Square Error (MSE):', round(model1_mse, 4), '\n')
+cat('Root Mean Square Error (RMSE):', round(model1_rmse, 4), '\n')
+```
+<hr style='border: 1px solid #000000;'>
+
+#### **Summary**
+
+The simple linear regression using log‑transformed area to predict log‑transformed price shows:
+
+- **R²**: `r round(summary(model1)$r.squared, 3)` (Approximately `r round(summary(model1)$r.squared * 100, 1)`% of the variance in log(price) is explained by log(area)).
+- **Adjusted R²**: `r round(summary(model1)$adj.r.squared, 3)`
+- **RMSE**: `r round(model1_rmse, 4)`(on the log‑price scale)
+- **MSE**: `r round(model1_mse, 4)`(on the log‑price scale)
+
+**Statistical Significance**:
+
+The relationship between area and price is
+`r ifelse(summary(model1)$coefficients[2,4] < 0.001, 'highly statistically significant', ifelse(summary(model1)$coefficients[2,4] < 0.05, 'statistically significant', 'not statistically significant'))`
+(p = `r format_p(summary(model1)$coefficients[2,4])`)
+
+**Coefficient Interpretation**:
+
+A 1% increase in area is associated with an estimated `r round(100 * coef(model1)['log_area'], 2)`% increase in price, under the log‑linear specification
+
+<hr style='border: 1px solid #000000;'>
+
+### **Residual Analysis - Model 1**
+
+```{r plots-Model1}
+
+# Extract residuals and fitted values
+
+resid1 <- resid(model1)
+fitted1 <- fitted(model1)
+
+# Shapiro-Wilk test for normality
+
+shapiro_test_m1 <- shapiro.test(resid1)
+cat('Shapiro-Wilk Normality Test Results:\n')
+cat('W =', round(shapiro_test_m1$statistic, 4),
+    ', p-value =', format_p(shapiro_test_m1$p.value), '\n')
+
+# Augment model for ggplot diagnostics
+
+model1_aug <- broom::augment(model1)
+
+# Residuals vs Fitted
+
+p_resid_fitted <- ggplot(model1_aug, aes(x = .fitted, y = .resid)) +
+  geom_point(alpha = 0.6, color = 'steelblue') +
+  geom_hline(yintercept = 0, color = 'red', linewidth = 1) +
+  labs(title = 'Residuals vs Fitted (Model 1)',
+       x = 'Fitted log(Price)', y = 'Residuals')
+
+# Scale-Location plot
+
+p_scale_location <- ggplot(model1_aug, aes(x = .fitted, y = sqrt(abs(.resid)))) +
+  geom_point(alpha = 0.6, color = 'orange') +
+  geom_smooth(se = FALSE, color = 'red') +
+  labs(title = 'Scale-Location Plot (Model 1)',
+       x = 'Fitted log(Price)', y = 'Sqrt(|Residuals|)')
+
+# QQ plot with standardized residuals
+
+p_qq <- ggplot(model1_aug, aes(sample = .std.resid)) +
+  stat_qq(color = 'darkblue') +
+  stat_qq_line(color = 'red') +
+  labs(title = 'QQ Plot of Standardized Residuals (Model 1)',
+       x = 'Theoretical Quantiles', y = 'Standardized Residuals')
+
+grid.arrange(p_resid_fitted, p_scale_location, p_qq, ncol = 2)
+```
+<hr style='border: 1px solid #000000;'>
+
+#### **Interpretation of Model 1 Diagnostics**
+
+- The residuals vs fitted plot shows `r ifelse(shapiro_test_m1$p.value > 0.05, 'no obvious heteroscedasticity patterns', 'potential heteroscedasticity')`.
+- The scale‑location plot provides a secondary check, with `r ifelse(shapiro_test_m1$p.value > 0.05, 'roughly constant variance across fitted values', 'evidence of variance inflation at certain fitted ranges')`.
+- The QQ plot and Shapiro‑Wilk test (p = `r format_p(shapiro_test_m1$p.value)`) suggest `r ifelse(shapiro_test_m1$p.value > 0.05, 'residuals are approximately normal', 'departures from normality')`.
+
+Overall, Model 1 demonstrates that log(area) is a statistically significant predictor of log(price) (p = `r format_p(summary(model1)$coefficients[2,4])`), with R² = `r round(summary(model1)$r.squared, 3)`.
+
+This baseline model provides a useful benchmark, though diagnostics hint at potential improvements with additional predictors.
+
+
+<hr style='border: 1px solid #000000;'>
+
+Next, we'll build a comprehensive multiple regression model incorporating structural features, comfort amenities, and prestige indicators to better predict housing prices.
+
+### **Multiple Regression Model**
+
+```{r multireg-m2}
+
+# Fit multiple regression using transformed variables
+
+model2 <- lm(log_price ~ log_area + total_rooms + comfort_index + status_index,
+             data = housing)
+
+# Display model summary (tidy table with confidence intervals)
+
+cat('=== MULTIPLE REGRESSION COEFFICIENTS (TIDY) ===\n')
+model2_tidy <- broom::tidy(model2, conf.int = TRUE)
+print(model2_tidy %>% mutate(across(where(is.numeric), ~round(., 4))))
+
+# Calculate additional model metrics
+
+model2_mse <- mean(model2$residuals^2)
+model2_rmse <- sqrt(model2_mse)
+
+cat('\n=== ADDITIONAL MODEL METRICS ===\n')
+cat('Mean Square Error (MSE):', round(model2_mse, 4), '\n')
+cat('Root Mean Square Error (RMSE):', round(model2_rmse, 4), '\n')
+cat('Adjusted R-squared:', round(summary(model2)$adj.r.squared, 4), '\n')
+
+# Check for multicollinearity using VIF
+
+cat('\n=== MULTICOLLINEARITY CHECK (VIF) ===\n')
+vif_values <- car::vif(model2)
+print('Variance Inflation Factors (VIF):')
+print(vif_values)
+```
+<hr style='border: 1px solid #000000;'>
+
+#### **Summary**
+
+**The multiple regression model incorporating structural, comfort, and status predictors shows**:
+
+- **R²**: `r round(summary(model2)$r.squared, 3)` (Approximately `r round(summary(model2)$r.squared * 100, 1)`% of the variance in log(price) is explained by the combined predictors).
+- **Adjusted R²**: `r round(summary(model2)$adj.r.squared, 3)`
+- **RMSE**: `r round(model2_rmse, 4)` (on the log‑price scale)
+- **MSE**: `r round(model2_mse, 4)` (on the log‑price scale)
+
+**Statistically Significant Predictors (p < 0.05)**:
+
+`r paste(model2_tidy$term[model2_tidy$p.value < 0.05], collapse = ', ')`
+
+**The variance inflation factors (VIF) indicate**:
+
+`r ifelse(any(vif_values > 10), 'potential multicollinearity concerns with some variables', 'acceptable levels of multicollinearity across all predictors')`.
+
+<hr style='border: 1px solid #000000;'>
+
+### **Residual Analysis - Model 2**
+
+```{r plots-Model2}
+
+# Extract residuals and fitted values for Model 2
+
+resid2 <- resid(model2)
+fitted2 <- fitted(model2)
+
+# Shapiro-Wilk test for normality
+
+shapiro_test_m2 <- shapiro.test(resid2)
+cat('Shapiro-Wilk Normality Test Results:\n')
+cat('W =', round(shapiro_test_m2$statistic, 4),
+    ', p-value =', format_p(shapiro_test_m2$p.value), '\n')
+
+# Augment model for ggplot diagnostics
+
+model2_aug <- broom::augment(model2)
+
+# Residuals vs Fitted
+
+p_resid_fitted2 <- ggplot(model2_aug, aes(x = .fitted, y = .resid)) +
+  geom_point(alpha = 0.6, color = 'darkgreen') +
+  geom_hline(yintercept = 0, color = 'red', linewidth = 1) +
+  labs(title = 'Residuals vs Fitted (Model 2)',
+       x = 'Fitted log(Price)', y = 'Residuals')
+
+# Scale-Location plot
+
+p_scale_location2 <- ggplot(model2_aug, aes(x = .fitted, y = sqrt(abs(.resid)))) +
+  geom_point(alpha = 0.6, color = 'orange') +
+  geom_smooth(se = FALSE, color = 'red') +
+  labs(title = 'Scale-Location Plot (Model 2)',
+       x = 'Fitted log(Price)', y = 'Sqrt(|Residuals|)')
+
+# QQ plot with standardized residuals
+
+p_qq2 <- ggplot(model2_aug, aes(sample = .std.resid)) +
+  stat_qq(color = 'darkblue') +
+  stat_qq_line(color = 'red') +
+  labs(title = 'QQ Plot of Standardized Residuals (Model 2)',
+       x = 'Theoretical Quantiles', y = 'Standardized Residuals')
+
+grid.arrange(p_resid_fitted2, p_scale_location2, p_qq2, ncol = 2)
+```
+<hr style='border: 1px solid #000000;'>
+
+#### **Interpretation of Model 2 Diagnostics**
+
+- **Residuals vs fitted plot**: `r ifelse(shapiro_test_m2$p.value > 0.05, 'random scatter without clear patterns, suggesting improved homoscedasticity compared to Model 1', 'potential heteroscedasticity remains')`.
+- **Scale‑location plot**: `r ifelse(shapiro_test_m2$p.value > 0.05, 'variance appears stable across fitted values', 'variance inflation observed at certain fitted ranges')`.
+- **QQ plot and Shapiro‑Wilk test**: (p = `r format_p(shapiro_test_m2$p.value)`) suggest `r ifelse(shapiro_test_m2$p.value > 0.05, 'residuals are approximately normal', 'departures from normality')`.
+
+Overall, Model 2 demonstrates improved explanatory power (Adj R² = `r round(summary(model2)$adj.r.squared, 3)`) and better residual behavior compared to Model 1, while maintaining acceptable multicollinearity levels.
+
+
+### **Model Comparison and ANOVA**
+
+To assess whether the multiple regression model represents a significant improvement over the simple linear model, we'll compare both models using key metrics and formal statistical testing.
+
+```{r final-model-plot}
+
+# Add predicted values to the housing dataframe
+
+plot_data <- housing %>%
+  mutate(Predicted_log_price = predict(model2))
+
+# Plot Actual vs Predicted
+
+ggplot(plot_data, aes(x = log_price, y = Predicted_log_price)) +
+  geom_point(alpha = 0.6, color = 'darkgreen') +
+  geom_smooth(method = 'lm', col = 'black', se = FALSE) + 
+  geom_abline(intercept = 0, slope = 1, col = 'red', linetype = 'dashed', size = 1) + # Ideal y=x line
+  labs(title = 'Model 2: Actual vs Predicted Log(Price)',
+       subtitle = 'Ideal predictions fall on the dashed red line (y=x)',
+       x = 'Actual Log(Price)', y = 'Predicted Log(Price)') +
+  coord_fixed(ratio = 1) 
+
+# Create comprehensive model comparison table
+
+model_comparison <- data.frame(
+  Model = c('Simple Regression', 'Multiple Regression'),
+  R_squared = c(summary(model1)$r.squared, summary(model2)$r.squared),
+  Adj_R_squared = c(summary(model1)$adj.r.squared, summary(model2)$adj.r.squared),
+  RMSE = c(sqrt(mean(model1$residuals^2)), sqrt(mean(model2$residuals^2))),
+  AIC = c(AIC(model1), AIC(model2)),
+  BIC = c(BIC(model1), BIC(model2))
+)
+
+print('=== MODEL PERFORMANCE COMPARISON ===')
+model_comparison_display <- model_comparison
+model_comparison_display[, -1] <- round(model_comparison_display[, -1], 4)
+print(model_comparison_display)
+
+# Formal ANOVA test for model comparison
+
+cat('\n=== ANOVA MODEL COMPARISON ===\n')
+anova_results <- anova(model1, model2)
+print(anova_results)
+
+# Calculate improvement percentages
+
+r2_improvement <- (summary(model2)$r.squared - summary(model1)$r.squared) /
+                  summary(model1)$r.squared * 100
+rmse_improvement <- (sqrt(mean(model1$residuals^2)) - sqrt(mean(model2$residuals^2))) /
+                    sqrt(mean(model1$residuals^2)) * 100
+
+cat('\n=== IMPROVEMENT METRICS ===\n')
+cat('R-squared Improvement:', round(r2_improvement, 1), '%\n')
+cat('RMSE Improvement:', round(rmse_improvement, 1), '%\n')
+cat('AIC Difference:', round(AIC(model1) - AIC(model2), 1), '\n')
+cat('BIC Difference:', round(BIC(model1) - BIC(model2), 1), '\n')
+
+# Create comprehensive model comparison table
+
+model_comparison <- data.frame(
+  Model = c('Simple Regression', 'Multiple Regression'),
+  R_squared = c(summary(model1)$r.squared, summary(model2)$r.squared),
+  Adj_R_squared = c(summary(model1)$adj.r.squared, summary(model2)$adj.r.squared),
+  RMSE = c(sqrt(mean(model1$residuals^2)), sqrt(mean(model2$residuals^2))),
+  AIC = c(AIC(model1), AIC(model2)),
+  BIC = c(BIC(model1), BIC(model2))
+)
+
+print('=== MODEL PERFORMANCE COMPARISON ===')
+model_comparison_display <- model_comparison
+model_comparison_display[, -1] <- round(model_comparison_display[, -1], 4)
+print(model_comparison_display)
+
+# Formal ANOVA test for model comparison
+
+cat('\n=== ANOVA MODEL COMPARISON ===\n')
+anova_results <- anova(model1, model2)
+print(anova_results)
+
+# Calculate improvement percentages
+
+r2_improvement <- (summary(model2)$r.squared - summary(model1)$r.squared) /
+                  summary(model1)$r.squared * 100
+rmse_improvement <- (sqrt(mean(model1$residuals^2)) - sqrt(mean(model2$residuals^2))) /
+                    sqrt(mean(model1$residuals^2)) * 100
+
+cat('\n=== IMPROVEMENT METRICS ===\n')
+cat('R-squared Improvement:', round(r2_improvement, 1), '%\n')
+cat('RMSE Improvement:', round(rmse_improvement, 1), '%\n')
+cat('AIC Difference:', round(AIC(model1) - AIC(model2), 1), '\n')
+cat('BIC Difference:', round(BIC(model1) - BIC(model2), 1), '\n')
+```
+<hr style="border: 1px solid #000000;">
+
+#### **Summary**
+
+The comparison between Model 1 and Model 2 reveals:
+
+- **R² improvement**: `r round(r2_improvement, 1)`% increase in explained variance
+- **RMSE reduction**: `r round(rmse_improvement, 1)`% improvement in prediction accuracy
+- **Information criteria**: Both AIC and BIC favor Model 2 with differences of `r round(AIC(model1) - AIC(model2), 1)` and `r round(BIC(model1) - BIC(model2), 1)` respectively
+- **Statistical significance**: ANOVA p‑value = `r format_p(anova_results$'Pr(>F)'[2])` indicates `r ifelse(anova_results$'Pr(>F)'[2] < 0.05, 'statistically significant improvement', 'no significant improvement')`
+
+<hr style='border: 1px solid #000000;'>
+
+### **Index-Only Models vs. Area Baseline**
+
+```{r index-only-comparison}
+
+cat('=== INDEX-ONLY MODEL COMPARISON ===\n')
+
+# Fit models using indices alone (without area)
+
+comfort_only_model <- lm(log_price ~ comfort_index, data = housing)
+status_only_model  <- lm(log_price ~ status_index, data = housing)
+rooms_only_model   <- lm(log_price ~ total_rooms, data = housing)
+
+# Combined indices model
+
+indices_combined_model <- lm(log_price ~ comfort_index + status_index + total_rooms, data = housing)
+
+# Collect metrics
+
+index_models <- list(
+  'Comfort Index Only' = comfort_only_model,
+  'Status Index Only'  = status_only_model,
+  'Total Rooms Only'   = rooms_only_model,
+  'Combined Indices'   = indices_combined_model
+)
+
+index_comparison <- purrr::map_df(index_models, ~ broom::glance(.x), .id = 'Model') %>%
+  select(Model, r.squared, adj.r.squared, AIC, BIC) %>%
+  mutate(across(where(is.numeric), ~round(., 4)))
+
+print(index_comparison)
+
+# Compare against Model 1 (area only) and Model 2 (full multiple regression)
+
+extended_comparison <- bind_rows(
+  glance(model1) %>% mutate(Model = 'Model 1: Area Only'),
+  glance(model2) %>% mutate(Model = 'Model 2: Multiple Regression'),
+  glance(comfort_only_model) %>% mutate(Model = 'Comfort Index Only'),
+  glance(status_only_model) %>% mutate(Model = 'Status Index Only'),
+  glance(rooms_only_model) %>% mutate(Model = 'Total Rooms Only'),
+  glance(indices_combined_model) %>% mutate(Model = 'Combined Indices')
+) %>%
+  select(Model, r.squared, adj.r.squared, AIC, BIC) %>%
+  mutate(across(where(is.numeric), ~round(., 4)))
+
+cat('\n=== EXTENDED MODEL COMPARISON (INCLUDING INDEX-ONLY MODELS) ===\n')
+print(extended_comparison)
+```
+<hr style='border: 1px solid #000000;'>
+
+#### **Summary**
+
+The comparison of index‑only models reveals distinct patterns in predictive strength:
+
+- **Comfort Index Only**: Explains ~25.6% of the variance in log(price) (Adj R² = 0.255). With higher AIC (313) and BIC (326), this model performs worse than the area‑only baseline. Livability features contribute to price but are not dominant drivers.
+- **Status Index Only**: Explains ~39.8% of the variance (Adj R² = 0.397), outperforming the area‑only baseline (R² = 0.336, Adj R² = 0.335). Both AIC (198 vs. 251) and BIC (211 vs. 264) are substantially lower, indicating that prestige and social signaling features collectively predict price more effectively than raw square footage in this dataset.
+- **Total Rooms Only**: Explains ~29.4% of the variance (Adj R² = 0.293), with AIC (284) and BIC (297) higher than the area‑only baseline. Spatial utility is meaningful but weaker than area or status features when modeled alone.
+- **Combined Indices**: Explains ~58.3% of the variance (Adj R² = 0.581). AIC (≈1.6) and BIC (≈23.1) are dramatically lower than the area‑only baseline, showing that the three indices together provide a strong, parsimonious model. While not as powerful as the full multiple regression (R² = 0.667, Adj R² = 0.665), the combined indices rival it in explanatory strength with fewer raw variables.
+
+**Interpretation**:
+
+Indices alone provide meaningful insights into housing price variation. While the comfort and rooms indices individually explain less variance than area, the **status index** alone outperforms the area‑only baseline, highlighting the importance of prestige and social signaling features. The **combined indices** demonstrate that engineered composites can capture a broader spectrum of buyer preferences, approaching the explanatory strength of the full multiple regression (Model 2).
+
+**Takeaways**:
+
+- Model 1 (Area Only) is a useful baseline but is outperformed by the Status Index Only model in this dataset.
+- Indices Alone vary in strength: comfort and rooms are weaker than area, but status is stronger.
+- Combined Indices provide a parsimonious yet powerful model, explaining ~58% of variance and rivaling Model 2.
+- Model 2 (Multiple Regression) remains the most robust, combining area with indices to maximize explanatory power and model fit.
+
+<hr style='border: 1px solid #000000;'>
+
+### **Index Validation**
+
+```{r index-validation}
+
+#Test if indices outperform individual variables
+
+cat('=== INDEX VALIDATION ANALYSIS ===\n')
+
+#Comfort Index vs individual comfort variables
+
+comfort_individual_model <- lm(log_price ~ log_area + hotwaterheating + airconditioning + furnishingstatus, data = housing)
+comfort_index_model <- lm(log_price ~ log_area + comfort_index, data = housing)
+
+#Status Index vs individual status variables
+
+status_individual_model <- lm(log_price ~ log_area + prefarea + parking + mainroad + stories, data = housing)
+status_index_model <- lm(log_price ~ log_area + status_index, data = housing)
+
+#Total Rooms vs individual room components
+
+rooms_individual_model <- lm(log_price ~ log_area + bedrooms + bathrooms + guestroom + basement, data = housing)
+rooms_index_model <- lm(log_price ~ log_area + total_rooms, data = housing)
+
+#Comparison table
+
+index_comparison <- bind_rows(
+  glance(comfort_individual_model) %>% mutate(Test = 'Comfort (Individual)'),
+  glance(comfort_index_model) %>% mutate(Test = 'Comfort (Index)'),
+  glance(status_individual_model) %>% mutate(Test = 'Status (Individual)'),
+  glance(status_index_model) %>% mutate(Test = 'Status (Index)'),
+  glance(rooms_individual_model) %>% mutate(Test = 'Rooms (Individual)'),
+  glance(rooms_index_model) %>% mutate(Test = 'Rooms (Index)')
+) %>%
+  select(Test, r.squared, adj.r.squared, AIC, BIC) %>%
+  mutate(across(where(is.numeric), ~round(., 4)))
+
+print('=== INDEX R-SQUARED COMPARISON ===')
+print(index_comparison)
+
+#Statistical significance tests
+
+anova_comfort <- anova(comfort_index_model, comfort_individual_model)
+anova_status <- anova(status_index_model, status_individual_model)
+anova_rooms <- anova(rooms_index_model, rooms_individual_model)
+
+cat('\n=== ANOVA: INDEX VS. INDIVIDUAL VARIABLES ===\n')
+cat('Comfort Index vs Individual - p-value:', format_p(anova_comfort$`Pr(>F)`[2]), '\n')
+cat('Status Index vs Individual - p-value:', format_p(anova_status$`Pr(>F)`[2]), '\n')
+cat('Total Rooms vs Individual - p-value:', format_p(anova_rooms$`Pr(>F)`[2]), '\n')
+```
+<hr style='border: 1px solid #000000;'>
+
+#### **Summary**
+
+The engineered indices demonstrate:
+
+- **Comfort Index**: Reduced predictive power compared to modeling individual comfort components separately.  
+- **Status Index**: Partial capture of status-related predictive information, but notably stronger than the area-only baseline.  
+- **Total Rooms**: Moderate representation of spatial utility, weaker than modeling individual room components directly.  
+
+Overall, the indices provide simplified yet effective predictors. While they sacrifice some accuracy compared to individual variables, they enhance interpretability and reduce model complexity.
+
+<hr style='border: 1px solid #000000;'>
+
+#### **Conclusion**
+
+Based on the comprehensive analysis:
+
+**Model Selection**:
+
+- The multiple regression model provides `r ifelse(anova_results$'Pr(>F)'[2] < 0.05, 'statistically significant', 'modest')` improvement over the simple area‑only model, with substantially higher explanatory power, and is recommended for housing price prediction.
+
+**Index Utility**:  
+
+- The engineered indices (comfort_index, status_index, total_rooms) provide meaningful composite measures. Comfort and rooms indices are weaker than their individual components, but the status index alone outperforms the area‑only baseline. The combined indices capture a broad spectrum of buyer preferences, explaining ~58% of variance, and approach the strength of the full multiple regression model.
+
+**Practical Application**:  
+
+- The final model explains `r round(summary(model2)$r.squared * 100, 1)`% of price variance and can reliably predict housing prices using readily available property characteristics, balancing accuracy with interpretability.
+
+<hr style='border: 3px solid #000000;'>
+
+
+## **Reflection - Week 10**
+
+### **What was easy or intuitive:**
+
+- The setup and data transformations felt straightforward. Converting categorical variables to factors and applying log transformations to correct skewness were intuitive steps, reinforced by clear visual evidence.
+- Building the baseline simple regression model was also natural; using area as a predictor aligned with expectations and provided a logical starting point.
+- Creating engineered indices (comfort, status, total rooms) was conceptually intuitive, since they mapped directly onto behavioral dimensions of housing demand.
+
+### **What was challenging:**
+
+- Interpreting the diagnostic plots and residual behavior required more careful thought. While generating the visuals was easy, drawing accurate conclusions about homoscedasticity and normality demanded deeper statistical reasoning.
+- The index validation step was more complex than anticipated. Comparing composite indices against individual components highlighted subtle trade‑offs between parsimony and predictive accuracy, and it challenged me to reconcile statistical results with interpretability.
+- Ensuring p‑values were reported explicitly and formatting inline metrics consistently required extra attention to detail, especially when balancing reproducibility with narrative clarity.
+
+### **Start, Stop, Continue:**
+
+- Start: I will begin incorporating visual comparison charts (e.g., bar plots of R² across models) earlier in the workflow to make differences immediately clear. I’ll also start documenting my reasoning alongside code so the narrative flows naturally.
+- Stop: I will stop relying on generic conditional logic outputs (ifelse) in my R Markdown summaries. While reproducible, they can obscure the actual story; instead, I’ll interpret results directly and clearly.
+- Continue: I will continue using engineered indices and composite measures to capture behavioral dimensions of data. I’ll also continue embedding inline metrics and explicit p‑values, as they make the analysis more transparent and professional.
+
+**Closing Thought**
+
+Overall, this assignment reinforced that regression modeling is not just about statistical fit, it’s about balancing accuracy, interpretability, and storytelling. The challenge of comparing area against indices revealed surprising insights (status features outperforming area), and the process taught me to refine both my technical workflow and my narrative clarity.
+
+### **Appreciation**
+
+This final assignment in R has been both challenging and rewarding. It pushed me to think critically about model design, interpret diagnostics with care, and balance statistical accuracy with narrative clarity. I’ve grown more confident in structuring analyses that are not only technically correct but also accessible and well‑communicated.
+I would like to sincerely thank you for guiding us through this journey with R. Your instruction and feedback have helped me move from simply “running code” to truly understanding the reasoning behind each step. This course has given me tools I will continue to use in both academic and professional contexts, and I’m grateful for the opportunity to learn under your direction. Your style of leadership is one I do well with, you trust your students to manage our performance and allow us to make mistakes, while keeping the bigger picture (learning) at the forefront of your feedback, and the attention to detail you provided in feedback showed that you genuinely learn about the style that your students develop and maintain a continuous flow, which I am sure at times can be challenging, but it shows us that we are your priority and a checklist is not your focus, our development is, and I know having situations in the past where that was not the case, it is easy to take that for granted or overlook it, but i wanted to take a second to make sure you knew it was not lost on me!
+
+Tim H.
+
+
+<hr style='border: 3px solid #000000;'>
