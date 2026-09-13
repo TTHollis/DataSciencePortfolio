@@ -19,7 +19,7 @@ Deployed applications live in their own repositories and are linked below.
 | [Hybrid Movie Recommender](projects/HybridMovieRecommender) | Combines content-based genre and tag similarity with SVD collaborative filtering on MovieLens | Cosine similarity, matrix factorization, hybrid scoring |
 | [Vagari Vita](https://github.com/TTHollis/VagariVita) | Local event discovery and AI-generated cultural travel briefings as a progressive web app. [Live app](https://vagarivita.onrender.com) | React PWA, FastAPI, LLM integration |
 
-Three additional projects from the applied data science capstone are in progress and will be added here as they are completed.
+Two capstone projects are in progress. The first extends the job posting fraud work above with unsupervised methods, and will be folded into the Verify This Job entry as it develops. The second will be added here once complete.
 
 ## Coursework
 
