@@ -10,6 +10,7 @@ Deployed applications live in their own repositories and are linked below.
 |---|---|---|
 | [Verify This Job](https://github.com/TTHollis/VerifyThisJob) | Fine-tuned LLM that flags fraudulent job postings and explains the red flags, deployed as a Streamlit app with a rule-based safety net. [Live app](https://verifythisjob.streamlit.app) | Full fine-tune of Qwen2.5-0.5B, Hugging Face Transformers, Streamlit |
 | [Job Posting Fraud Classifier](projects/JobPostingFraudClassifier) | Classical ML predecessor to Verify This Job: predicts fraudulent postings from text and structural features on the EMSCAD dataset, tuned for recall | TF-IDF, SMOTE, logistic regression, random forest, threshold tuning |
+| [Scam Signatures](projects/ScamSignatures) | Drops the fraud label and clusters postings by language alone to find recognizable scam families, including one operator advertising 60 job titles across 22 locations behind a single shared paragraph | Sentence-BERT embeddings, UMAP, HDBSCAN, TF-IDF, cluster validation |
 | [Billboard Hit Prediction](projects/BillboardHitPrediction) | Tests whether lyrical features predict Billboard top-ten status, and documents how an apparent AUC of 0.778 turned out to be train/test leakage from duplicate chart records | NLP feature engineering, leakage audit, deduplication, cross-validation |
 | [City Livability Data Pipeline](projects/CityLivabilityDataPipeline) | Cleans and merges HUD fair market rents, Walk Score rankings, and Census data into a SQLite database, then visualizes cost of living and quality of life across U.S. cities. The groundwork for QRoots | Web scraping, API ingestion, data cleaning, SQLite, Power BI |
 | [QRoots](https://github.com/TTHollis/QRoots) | Relocation guide that scores U.S. census tracts on crime, education, income, housing, and quality of life. [Live app](https://qroots.onrender.com) | React, Python, Census API, SHAP explanations |
@@ -19,7 +20,7 @@ Deployed applications live in their own repositories and are linked below.
 | [Hybrid Movie Recommender](projects/HybridMovieRecommender) | Combines content-based genre and tag similarity with SVD collaborative filtering on MovieLens | Cosine similarity, matrix factorization, hybrid scoring |
 | [Vagari Vita](https://github.com/TTHollis/VagariVita) | Local event discovery and AI-generated cultural travel briefings as a progressive web app. [Live app](https://vagarivita.onrender.com) | React PWA, FastAPI, LLM integration |
 
-Two capstone projects are in progress. The first extends the job posting fraud work above with unsupervised methods, and will be folded into the Verify This Job entry as it develops. The second will be added here once complete.
+Scam Signatures is an active capstone project. Two of its three research questions are answered; the third, testing whether the signatures hold on postings written in 2025 and 2026, is in progress. A second capstone will be added here once complete.
 
 ## Coursework
 
