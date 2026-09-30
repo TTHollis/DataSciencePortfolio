@@ -2,11 +2,15 @@
 
 Fraud detectors tell a job seeker that a posting is suspicious. They do not tell them why. This project drops the label and asks whether fraudulent postings organize themselves into a small number of recognizable families based on their language alone.
 
+Clustering 15,872 real job postings with the fraud label withheld, TF-IDF captured 61.0 percent of all fraud inside 6.6 percent of the corpus, and postings the clustering declined to assign carried fraud *below* the base rate. Four recognizable archetypes account for 47.5 percent of all fraud across 3.2 percent of postings. The largest single fraud operator in the dataset presents better than the average legitimate employer, carrying a company profile and logo on every listing, which means structural completeness is not evidence of legitimacy.
+
+Scored against 165 postings collected in 2026, those signatures no longer describe current listings. So the two findings that do transfer were shipped into a live tool and the rest deliberately was not. That decision is in [What shipped](#what-shipped), and it is the part of this project I would most want read.
+
 ## The question
 
 I have built a classifier and a fine-tuned language model on this dataset in earlier courses. Both answer one question, is this posting fraudulent, and a verdict without an explanation is hard for a job seeker to act on and hard for a trust and safety team to audit.
 
-So this is unsupervised. Postings are clustered with the fraud label withheld, and the label is only revealed afterward to score what the clustering found. Three questions: does fraud concentrate or scatter, how many distinct signatures exist and what defines each, and do postings written in 2025 and 2026 fall into those signatures or form new ones. The first two are answered here. The third needs a corpus that does not exist yet and is the remaining work.
+So this is unsupervised. Postings are clustered with the fraud label withheld, and the label is only revealed afterward to score what the clustering found. Three questions: does fraud concentrate or scatter, how many distinct signatures exist and what defines each, and do postings written today fall into those signatures or form new ones. All three are answered here.
 
 ## Data
 
@@ -57,6 +61,42 @@ The Bait Ad is recognizable entirely by absence and a simple structural filter c
 
 That is the reversal worth taking away. The crudest fraud is the easiest to catch and the most professional is the hardest, and structural completeness that reads as legitimacy is precisely what the largest operator here invested in.
 
+The Common Form is the fourth shape and the one I decline to treat as evidence. It spans 200 job titles at a 43.1 percent fraud rate and every cluster inside it contains real employers, so membership indicates how much scrutiny a posting warrants and never a verdict.
+
+## Do the signatures survive to today?
+
+The third question can be answered without any labels at all. I collected 165 job postings in 2026 from three public job board interfaces, masking each employer name at collection before anything was written to disk, then scored them against the fitted vectorizer and the archetype centroids. Nothing was refitted, so current text is judged entirely by historical vocabulary.
+
+They do not survive. Ordinary historical postings sit at a median similarity of 0.100 to their nearest archetype and archetype members at 0.289. The modern sample sits at 0.133, roughly 18 percent of the distance from an ordinary posting to a recognizable one. Document length does not explain the gap: matched against the 6,414 historical postings of comparable length, the baseline rises only to 0.110 while the modern sample rises to 0.145.
+
+Two further measurements say the same thing from different directions. Only 56.2 percent of the words in a current posting are recognized by a vocabulary fitted in 2014, so close to half of modern posting language is invisible to the model. And 96.4 percent of modern postings land nearest the Common Form, the one archetype this project refuses to treat as evidence, which is the signal that the discriminating archetypes have stopped discriminating.
+
+Worth stating as a precision result: neither the Bait Ad nor the Borrowed Brand attracted a single modern posting, so the method raised no fraud shaped alarm against any of the 165 legitimate listings it was shown.
+
+The sample is small and drawn from curated boards, so it is almost entirely legitimate. It tests whether these shapes persist in current language, not whether they would catch current fraud. Answering that second question needs a labeled modern corpus, which is the work this result makes necessary.
+
+## What a supervised model adds, and what it cannot
+
+A supervised check confirms the representation finding by an independent route. Holding the classifier constant and varying only the representation, logistic regression reaches 0.855 average precision on raw TF-IDF against 0.427 on sentence embeddings, exactly double. The result is not an artifact of dimensionality, since embeddings at 384 dimensions lose to TF-IDF compressed to 100 components, which reaches 0.568. A decision tree scores below both on every representation, which reflects how poorly axis aligned splits suit high dimensional sparse text.
+
+That check also measured how much of a supervised score is memorization rather than generalization. Trained with part of the Ghost Agency campaign in view, the model flags 100 percent of the held out remainder. Trained with the campaign removed entirely, it flags 14.1 percent of it, while performance on non campaign postings is unchanged at 0.823 against 0.825.
+
+A classifier is therefore close to blind to campaigns it has not already been shown, and a new campaign is by definition one it has not been shown. That gap is what unsupervised discovery exists to fill, and it is the strongest argument in this project for doing the work this way.
+
+Labels are used here only to rank representations and appear nowhere in the clustering pipeline.
+
+## What shipped
+
+The archetype work was folded into [Verify This Job](https://github.com/TTHollis/VerifyThisJob), the fine tuned classifier application this project extends.
+
+The original plan was to ship the fitted vectorizer and a matrix of archetype centroids and report each posting's nearest archetype. The drift result ruled that out. With 96.4 percent of current postings landing nearest the Common Form, a centroid matching signal would report the one archetype this project refuses to treat as evidence, for nearly every posting a real user submits, with the outward appearance of precision.
+
+What shipped instead carries no model at all. The two findings that transfer are exact campaign phrases and structural absence, and both are plain text operations. `archetype_screen.py` holds the four Ghost Agency phrases as exact match rules and detects the Bait Ad shape from brevity combined with the absence of any employer description and any stated requirement. It depends on nothing beyond the Python standard library, which also means it returns an answer while the language model is still loading, and it carries forward unchanged if the application is later rebuilt on a different framework.
+
+Precedence follows the evidence. A campaign phrase match escalates the application verdict on its own, overriding a legitimate classification, because those four phrases identified 99 postings with no false positives and because the supervised check above showed the classifier catches only 14.1 percent of a campaign it has not seen. A structural match raises a caution and never more, because short legitimate postings can carry that shape.
+
+One signal was added during integration rather than discovered by the analysis. The Bait Ad description notes guaranteed wages spanning an implausible range but never operationalized it, so the module flags any advertised range whose upper figure is at least three times its lower. Measured against the corpus afterward, 42 postings match, of which 21.4 percent are fraudulent against the 4.48 percent baseline, a lift of 4.8. The sample is small enough that the 95 percent interval runs from 11.7 to 35.9 percent, and it never fires alone.
+
 ## Validation
 
 Across UMAP seeds of 42, 7, and 2026 the pipeline produced 173, 172, and 190 clusters at 31.4, 29.1, and 31.0 percent noise. Pairwise agreement on the roughly 9,800 postings clustered in every run gave adjusted Rand indices of 0.898 to 0.937 and normalized mutual information above 0.97. The structure is in the data rather than in any single initialization, though about a thousand boundary postings move between clustered and noise depending on the seed.
@@ -67,6 +107,8 @@ The silhouette based selection of k that my proposal specified does not select o
 
 The most serious one concerns the labels. Within a single recruiter's postings there are byte identical company descriptions where the dataset labels one posting fraudulent and two others legitimate. If the label distinguishes documents that are textually indistinguishable, it encodes information outside the text, most plausibly complaints received or account action taken after publication. No text based method can recover that, and it places a ceiling on what any result here can claim.
 
+A single operator accounts for 13.9 percent of all fraud, so the concentration result partly measures one prolific actor. The result does not rest on it, since removing the Ghost Agency entirely still leaves roughly 200 fraudulent postings concentrated in a small share of the corpus, but the qualification is real.
+
 The data is also eleven to fourteen years old, and the platform's annotations are treated as ground truth without independent verification. The archetypes are named from reading cluster members, which is interpretation rather than measurement, and a different reader might draw the lines differently.
 
 Identifiable company and individual names surfaced by the clustering are masked in all notebook output. The source data is already public, so this is display-layer redaction rather than protection, but it keeps the analysis from republishing named accusations. The current implementation uses a hand-curated list, which does not generalize; named entity recognition is the correct fix and is on the list.
@@ -75,14 +117,19 @@ Identifiable company and individual names surfaced by the clustering are masked 
 
 | File | Contents |
 |---|---|
-| `scam_signatures.ipynb` | Full analysis: preparation, chunked embedding, both clustering pipelines, baselines, validation, archetype interpretation, all five figures |
+| `scam_signatures.ipynb` | Full analysis: preparation, chunked embedding, both clustering pipelines, baselines, validation, the modern sample, the supervised comparison, archetype interpretation, all six figures |
 | `fig1_embedding_space.png` | Postings in two dimensional embedding space, labels withheld |
 | `fig2_fraud_rate_by_cluster.png` | Fraud rate by cluster against the corpus base rate |
 | `fig3_capture_vs_review.png` | Fraud captured by each representation against the share of corpus reviewed |
 | `fig4_archetype_fingerprint.png` | Structural fingerprint of each archetype against the corpus baseline |
 | `fig5_ghost_agency_campaign.png` | The Ghost Agency campaign across the embedding space and its job titles |
-| `HollisT_Proj1MS1_DSC680.docx`, `.pdf`, `HollisT_Milestone1.odt` | Proposal and data selection |
+| `fig6_modern_similarity.png` | Similarity to the nearest archetype for current postings against historical ones |
+| `HollisT_Proj1MS3_DSC680.docx`, `.pdf` | Final white paper, including ten audience questions answered in full |
+| `HollisT_Proj1MS3_Presentation_DSC680.pptx` | Recorded presentation, 13 slides with narration |
+| `HollisT_Proj1MS1_DSC680.docx` | Proposal |
 | `HollisT_Proj1MS2_DSC680.docx` | Draft white paper |
+
+The screening module that shipped from this work lives with the application it was written for, at [TTHollis/VerifyThisJob](https://github.com/TTHollis/VerifyThisJob), and carries a self test that verifies it still recognizes a known campaign posting.
 
 The source dataset is not redistributed. Download `fake_job_postings.csv` from [Kaggle](https://www.kaggle.com/datasets/shivamb/real-or-fake-fake-jobposting-prediction) into this folder to run the notebook.
 
@@ -97,7 +144,7 @@ The notebook runs top to bottom and reproduces every figure and table above. Emb
 
 ## Status
 
-This is an active capstone project. The first two research questions are answered; the third, whether postings written in 2025 and 2026 fall into these signatures or form new ones, requires a contemporary evaluation set that has not been assembled yet. Topic modeling within the fraud dense clusters and the switch from a curated redaction list to named entity recognition are also outstanding.
+All three research questions are answered and the transferable findings are deployed. The outstanding work is a labeled modern corpus, which the drift result makes necessary: this project can say the historical shapes no longer describe current postings, but not yet what has replaced them. Also outstanding are typography features such as capitalization consistency and misspelling rates, embedding each field separately so long marketing text does not outweigh short compensation claims, clustering the sparse representation directly rather than the reduced one, and the switch from a curated redaction list to named entity recognition.
 
 ## References
 
