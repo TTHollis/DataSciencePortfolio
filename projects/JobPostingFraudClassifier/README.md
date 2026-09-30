@@ -49,7 +49,13 @@ The model also predicts a label without explaining it, which is less useful to a
 
 ## What came next
 
-This project is the ancestor of [Verify This Job](https://github.com/TTHollis/VerifyThisJob), which addresses both limitations. There a language model is fine-tuned on the same underlying data so that it returns a verdict along with the specific phrases that triggered it, and an independent rule-based layer covers the modern scam patterns EMSCAD never saw. The two signals are combined conservatively, so either one can escalate a posting to a caution result.
+This project is the first of three passes at the same problem, each one built to fix what the last could not do.
+
+[Verify This Job](https://github.com/TTHollis/VerifyThisJob) addresses both limitations above. A language model is fine-tuned on the same underlying data so that it returns a verdict along with the specific phrases that triggered it, and an independent rule-based layer covers modern scam patterns EMSCAD never saw.
+
+[Scam Signatures](../ScamSignatures) then dropped the label entirely and asked what shape fraud takes when nothing tells you which postings are fraudulent. It found a single operator running 99 postings on one reused paragraph, and it measured something this classifier cannot see: trained with that campaign removed, a supervised model catches only 14.1 percent of it. A classifier is close to blind to any campaign it has not already been shown.
+
+All three now run in the same application. The exact phrases from that campaign escalate a posting on their own, overriding a legitimate classification, because that is precisely the case the classifier misses.
 
 ## Files
 
