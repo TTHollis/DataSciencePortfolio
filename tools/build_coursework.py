@@ -1,7 +1,7 @@
 '''
 build_coursework.py
 
-Copies a curated subset of C:\\Users\\slimt\\Coursework into the HollisT repo
+Copies a curated subset of C:\\Users\\slimt\\Coursework into the DataSciencePortfolio repo
 under coursework/<CourseName>/, applying keep and exclude rules, skipping
 exact-duplicate files, and writing a manifest of everything kept and skipped.
 
@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 SRC = Path.home() / 'Coursework'
-REPO = Path.home() / 'HollisT'
+REPO = Path.home() / 'DataSciencePortfolio'
 DEST = REPO / 'coursework'
 MANIFEST = Path.home() / 'coursework_manifest.txt'
 OLD_UPLOADS = Path.home() / '_old_partial_uploads'
