@@ -28,40 +28,18 @@
   <main id="main">
 
     <section class="hero" id="top">
-      <div class="wrap hero-grid">
-        <div class="hero-text">
-          <h1>Tim Hollis</h1>
-          <p class="lede">
-            Fifteen years in financial services, including years teaching fraud mitigation.
-            Now I build models that catch scams and explain why, in words the person
-            reading the posting can actually use.
-          </p>
-          <div class="hero-actions">
-            <a class="btn btn-primary" href="#work">See the work</a>
-            <a class="btn btn-secondary" href="https://github.com/TTHollis">GitHub</a>
-            <a class="btn btn-secondary" href="https://www.linkedin.com/in/timothy-hollis">LinkedIn</a>
-          </div>
+      <div class="wrap">
+        <h1>Tim Hollis</h1>
+        <p class="lede">
+          Fifteen years in financial services, including years teaching fraud mitigation.
+          Now I build models that catch job scams and explain why, in words a job seeker
+          can actually use.
+        </p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="#work">See the work</a>
+          <a class="btn btn-secondary" href="https://github.com/TTHollis">GitHub</a>
+          <a class="btn btn-secondary" href="https://www.linkedin.com/in/timothy-hollis">LinkedIn</a>
         </div>
-
-        <figure class="posting" aria-labelledby="posting-caption">
-          <div class="posting-card">
-            <p class="posting-title">Data Entry Clerk, Remote</p>
-            <p>
-              <mark id="f1">Earn $35/hr from home, no experience required.</mark><sup><a href="#n1">1</a></sup>
-              We are growing fast and need reliable people right away.
-              <mark id="f2">Our hiring manager will text you to schedule a quick chat.</mark><sup><a href="#n2">2</a></sup>
-              <mark id="f3">Selected candidates buy equipment through our approved vendor, reimbursed with your first check.</mark><sup><a href="#n3">3</a></sup>
-            </p>
-          </div>
-          <ol class="posting-notes">
-            <li id="n1">Pay out of line with the role and the experience asked for.</li>
-            <li id="n2">Contact moves off the job board to a personal phone.</li>
-            <li id="n3">The applicant pays first. Real employers do not do this.</li>
-          </ol>
-          <figcaption id="posting-caption">
-            An illustrative posting, flagged the way Verify This Job flags them: a verdict plus the reasons.
-          </figcaption>
-        </figure>
       </div>
     </section>
 
@@ -76,9 +54,129 @@
     <section class="section section-alt" id="work">
       <div class="wrap">
         <h2>Work</h2>
-        <!-- Filled in step 2 -->
-        <p class="placeholder">Project cards coming shortly. Until then, everything is in the
-          <a href="https://github.com/TTHollis/DataSciencePortfolio">portfolio repository</a>.</p>
+        <p class="section-intro">
+          Eleven projects so far, grouped by the kind of problem they take on. Each one links to
+          the code and a write-up that walks through the reasoning in plain language, including
+          what did not work.
+        </p>
+
+        <article class="featured" aria-labelledby="featured-title">
+          <h3 id="featured-title">One problem, three passes: fraudulent job postings</h3>
+          <p class="featured-intro">
+            Each project exists because of something the one before it could not do. All three
+            now run together in one live tool.
+          </p>
+          <ol class="phases">
+            <li>
+              <h4><a href="https://github.com/TTHollis/DataSciencePortfolio/tree/main/projects/JobPostingFraudClassifier">Job Posting Fraud Classifier</a></h4>
+              <p class="phase-q">Can a model tell a scam posting from a real one?</p>
+              <p>Yes. The chosen model catches 156 of 173 scams in the test set. It was picked over
+                a model with better scores on paper, because that one missed 61 scams.</p>
+            </li>
+            <li>
+              <h4><a href="https://github.com/TTHollis/VerifyThisJob">Verify This Job</a></h4>
+              <p class="phase-q">Can it explain why a posting looks wrong?</p>
+              <p>A fine-tuned language model gives a verdict and names the red flags. A separate
+                set of rules runs beside it, so one bad model call cannot wave a scam through.</p>
+            </li>
+            <li>
+              <h4><a href="https://github.com/TTHollis/DataSciencePortfolio/tree/main/projects/ScamSignatures">Scam Signatures</a></h4>
+              <p class="phase-q">What does fraud look like when nothing is labeled?</p>
+              <p>Grouping postings by language alone found one operator running 99 postings off a
+                single reused paragraph. A classifier that had never seen that campaign caught only
+                14.1 percent of it.</p>
+            </li>
+          </ol>
+          <a class="btn btn-primary" href="https://verifythisjob.streamlit.app">Try Verify This Job</a>
+        </article>
+
+        <div class="group">
+          <h3>Place and people</h3>
+          <div class="project-grid">
+            <article class="project">
+              <h4>City Livability Data Pipeline</h4>
+              <p>Rent, walkability, and Census data are published at three different geographic
+                levels. This pipeline reconciles them into one database and a livability score for
+                2,309 counties.</p>
+              <p class="methods">Web scraping, Census API, SQLite, Power BI</p>
+              <p class="links"><a href="https://github.com/TTHollis/DataSciencePortfolio/tree/main/projects/CityLivabilityDataPipeline">Code and write-up</a></p>
+            </article>
+            <article class="project">
+              <h4>QRoots</h4>
+              <p>Scores every U.S. census tract on crime, education, income, housing, and quality
+                of life, then lets you change the weights to match what matters to you.</p>
+              <p class="methods">React, Python, Census API, SHAP</p>
+              <p class="links"><a href="https://qroots.onrender.com">Live app</a><a href="https://github.com/TTHollis/QRoots">Code</a></p>
+            </article>
+            <article class="project">
+              <h4>Vagari Vita</h4>
+              <p>Finds local events and writes short cultural briefings for travelers, so you know
+                what to expect before you arrive.</p>
+              <p class="methods">React PWA, FastAPI, language model integration</p>
+              <p class="links"><a href="https://vagarivita.onrender.com">Live app</a><a href="https://github.com/TTHollis/VagariVita">Code</a></p>
+            </article>
+            <article class="project project-pending">
+              <h4>Housing Appraisal Bias</h4>
+              <p>In progress. How appraisal gaps keep Black homeowners in particular from building
+                wealth at the same rate, and what that costs across generations.</p>
+              <p class="methods">Coming later this term</p>
+            </article>
+          </div>
+        </div>
+
+        <div class="group">
+          <h3>Telling the story with data</h3>
+          <div class="project-grid">
+            <article class="project">
+              <h4>Childcare Affordability in Texas</h4>
+              <p>A case for state legislators built on the federal government's own 7 percent
+                affordability standard, delivered as a briefing deck, a county dashboard, and an
+                infographic.</p>
+              <p class="methods">Data storytelling, Power BI, infographic design</p>
+              <p class="links"><a href="https://github.com/TTHollis/DataSciencePortfolio/tree/main/projects/ChildcareAffordabilityTexas">Code and write-up</a></p>
+            </article>
+            <article class="project">
+              <h4>Airline Complaints Analysis</h4>
+              <p>Where, when, and why travelers complain to the TSA. Airport attribution jumped
+                from about 45 to 73 percent after a system change, so every map uses only the
+                comparable period.</p>
+              <p class="methods">Geographic joins, choropleth maps, seasonality analysis</p>
+              <p class="links"><a href="https://github.com/TTHollis/DataSciencePortfolio/tree/main/projects/AirlineComplaintsAnalysis">Code and write-up</a></p>
+            </article>
+          </div>
+        </div>
+
+        <div class="group">
+          <h3>Prediction and recommendation</h3>
+          <div class="project-grid">
+            <article class="project">
+              <h4>Billboard Hit Prediction</h4>
+              <p>Do lyrics predict a top-ten hit? The first answer looked like yes. An audit found
+                duplicate songs leaking between training and testing, and the corrected answer is
+                no better than chance.</p>
+              <p class="methods">NLP features, leakage audit, cross-validation</p>
+              <p class="links"><a href="https://github.com/TTHollis/DataSciencePortfolio/tree/main/projects/BillboardHitPrediction">Code and write-up</a></p>
+            </article>
+            <article class="project">
+              <h4>Retail Sales Forecasting</h4>
+              <p>Monthly U.S. retail sales, a seasonal baseline against SARIMA. The test window
+                lands on the COVID recovery, so the error measures a structural break as much as
+                the models.</p>
+              <p class="methods">Time series, SARIMA, residual analysis</p>
+              <p class="links"><a href="https://github.com/TTHollis/DataSciencePortfolio/tree/main/projects/RetailSalesForecasting">Code and write-up</a></p>
+            </article>
+            <article class="project">
+              <h4>Hybrid Movie Recommender</h4>
+              <p>Blends "movies like this one" with "people like you also liked," because each
+                fails where the other works. Every recommendation shows both scores behind it.</p>
+              <p class="methods">Content similarity, SVD collaborative filtering</p>
+              <p class="links"><a href="https://github.com/TTHollis/DataSciencePortfolio/tree/main/projects/HybridMovieRecommender">Code and write-up</a></p>
+            </article>
+          </div>
+        </div>
+
+        <p class="work-footer">Weekly coursework from the program lives in the
+          <a href="https://github.com/TTHollis/DataSciencePortfolio/tree/main/coursework">coursework folder</a>.</p>
       </div>
     </section>
 
