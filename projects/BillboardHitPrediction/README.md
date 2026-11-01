@@ -70,7 +70,7 @@ A sample of songs that never charted, so the comparison has something to push ag
 | File | Contents |
 |---|---|
 | `billboard_hit_prediction_final.ipynb` | Full analysis: EDA, NLP features, duplicate audit, deduplication, both models, cross-validation, post-fix leakage check |
-| `milestone_modeling.ipynb` | Earlier modeling pass, retained as the pre-correction version |
+| `modeling_pre_correction.ipynb` | Earlier modeling pass, retained as the pre-correction version |
 | `billboard_hit_prediction_paper.docx` | Written analysis |
 | `final_writeup.docx`, `final_writeup_draft.docx` | Term paper and earlier draft |
 | `project_proposal.docx` | Original proposal |

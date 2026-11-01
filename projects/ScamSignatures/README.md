@@ -124,10 +124,10 @@ Identifiable company and individual names surfaced by the clustering are masked 
 | `fig4_archetype_fingerprint.png` | Structural fingerprint of each archetype against the corpus baseline |
 | `fig5_ghost_agency_campaign.png` | The Ghost Agency campaign across the embedding space and its job titles |
 | `fig6_modern_similarity.png` | Similarity to the nearest archetype for current postings against historical ones |
-| `HollisT_Proj1MS3_DSC680.docx`, `.pdf` | Final white paper, including ten audience questions answered in full |
-| `HollisT_Proj1MS3_Presentation_DSC680.pptx` | Recorded presentation, 13 slides with narration |
-| `HollisT_Proj1MS1_DSC680.docx` | Proposal |
-| `HollisT_Proj1MS2_DSC680.docx` | Draft white paper |
+| `white_paper.docx`, `.pdf` | Final white paper, including ten audience questions answered in full |
+| `presentation.pptx` | Recorded presentation, 13 slides with narration |
+| `proposal.docx` | Proposal |
+| `white_paper_draft.docx` | Draft white paper |
 
 The screening module that shipped from this work lives with the application it was written for, at [TTHollis/VerifyThisJob](https://github.com/TTHollis/VerifyThisJob), and carries a self test that verifies it still recognizes a known campaign posting.
 

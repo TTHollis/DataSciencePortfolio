@@ -45,10 +45,10 @@ The framing carries risk too. The story could imply that childcare prices cause 
 | File | Contents |
 |---|---|
 | `childcare_affordability_story.ipynb` | Final term project: analysis, all three mediums, summary paper, ethics assessment |
-| `milestone1_findings.ipynb` | Initial findings and the affordability gap |
-| `milestone2_visuals.ipynb` | Visualization development |
-| `milestone3_mockups.ipynb` | Medium mock-ups |
-| `milestone4_review.ipynb` | Peer review and revision |
+| `initial_findings.ipynb` | Initial findings and the affordability gap |
+| `visual_drafts.ipynb` | Visualization development |
+| `mockups.ipynb` | Medium mock-ups |
+| `peer_review_revision.ipynb` | Peer review and revision |
 | `viz_parcoords_childcare_tx.png` | Parallel coordinates view of Texas counties |
 
 ## Running it

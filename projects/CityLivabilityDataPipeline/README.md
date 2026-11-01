@@ -56,8 +56,8 @@ The county-level version of this question became [QRoots](https://github.com/TTH
 | `city_livability_pipeline.ipynb` | Full pipeline: acquisition, cleaning, SQLite load, SQL joins, index, visualizations |
 | `city_livability.db` | SQLite database with the three cleaned tables |
 | `city_livability_dashboard.pbix` | Power BI dashboard |
-| `term_project_notebook.ipynb` | Earlier milestone work |
-| `milestone1_proposal.docx` | Project proposal |
+| `pipeline_draft.ipynb` | Earlier draft of the pipeline |
+| `proposal.docx` | Project proposal |
 | `hud_*.csv`, `merged_*.csv`, `qol_ranked.csv` | Cleaned and merged intermediate datasets |
 | `Viz*.png` | Exported dashboard visuals |
 

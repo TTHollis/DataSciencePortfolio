@@ -62,11 +62,12 @@ All three now run in the same application. The exact phrases from that campaign 
 | File | Contents |
 |---|---|
 | `fraud_classifier_final.ipynb` | Full pipeline: EDA, feature engineering, SMOTE, both models, threshold tuning, feature importance |
-| `milestone3_eda_visuals.ipynb` | Exploratory analysis and the class balance, missingness, and structural feature charts |
-| `milestone4_modeling.ipynb` | Modeling milestone, precursor to the final notebook |
+| `eda_visuals.ipynb` | Exploratory analysis and the class balance, missingness, and structural feature charts |
+| `modeling_draft.ipynb` | Modeling draft, precursor to the final notebook |
 | `fraud_classifier_paper.docx` | Written analysis |
 | `fraud_classifier_presentation.pptx` | Presentation deck |
-| `milestone*.docx` | Proposal, data selection, and interim reports |
+| `proposal.docx`, `data_selection_report.docx`, `eda_report.docx` | Proposal, data selection, and exploratory analysis reports |
+| `modeling_report.docx`, `modeling_report_addendum.docx` | Modeling report and its addendum |
 
 ## Running it
 
