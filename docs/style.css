@@ -172,6 +172,22 @@ section[id] { scroll-margin-top: var(--nav-h); }
 .phases p { font-size: 0.975rem; margin: 0 0 0.5rem; }
 .phase-q { font-weight: 600; color: var(--dark-gray); }
 
+.featured-cta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.25rem 1.75rem;
+}
+.preview {
+  display: block;
+  width: min(100%, 22rem);
+  border: 1px solid var(--light-gray);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.preview img { display: block; width: 100%; height: auto; }
+.preview:hover { border-color: var(--accent); }
+
 .group { margin-bottom: 3rem; }
 .project-grid {
   display: grid;
