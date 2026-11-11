@@ -19,9 +19,9 @@ Deployed applications live in their own repositories and are linked below.
 | [Retail Sales Forecasting](projects/RetailSalesForecasting) | Forecasts monthly U.S. retail sales and compares a baseline model against SARIMA with residual analysis and RMSE | Time series analysis, SARIMA, train/test evaluation |
 | [Airline Complaints Analysis](projects/AirlineComplaintsAnalysis) | Where, when, and why air travelers complain, joined to airport geography and visualized as a six-chart narrative | Geographic joins, choropleth, seasonality heatmap, slope and dumbbell charts |
 | [Hybrid Movie Recommender](projects/HybridMovieRecommender) | Combines content-based genre and tag similarity with SVD collaborative filtering on MovieLens | Cosine similarity, matrix factorization, hybrid scoring |
-| [Vagari Vita](https://github.com/TTHollis/VagariVita) | Local event discovery and AI-generated cultural travel briefings as a progressive web app. [Live app](https://vagarivita.onrender.com) | React PWA, FastAPI, LLM integration |
+| [Vagari Vita (personal project)](https://github.com/TTHollis/VagariVita) | Local event discovery and AI-generated cultural travel briefings as a progressive web app. [Live app](https://vagarivita.onrender.com) | React PWA, FastAPI, LLM integration |
 
-Scam Signatures is the first of two capstone projects. All three of its research questions are answered, and the findings that survived testing against current postings are deployed in Verify This Job. The second capstone will be added here once complete.
+Scam Signatures and Priced Out of Equity are the two capstone projects. Scam Signatures answered all three of its research questions, and the findings that survived testing against current postings are deployed in Verify This Job. Priced Out of Equity measures the home appraisal gap across more than 83,000 census tracts and produces a neighborhood-level table built for QRoots.
 
 ## Coursework
 
