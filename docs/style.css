@@ -130,11 +130,17 @@ section[id] { scroll-margin-top: var(--nav-h); }
 .section h4 { font-size: 1.0625rem; font-weight: 700; margin: 0 0 0.4rem; }
 
 .featured {
+  --accent: var(--amber);
+  --accent-ink: var(--dark-gray);
   background: var(--bg);
-  border-top: 6px solid var(--amber);
-  padding: 2rem 2rem 2.25rem;
-  margin-bottom: 3.5rem;
+  border-top: 6px solid var(--accent);
 }
+
+.featured-place {
+  --accent: var(--royal-blue);
+  --accent-ink: #fff;
+}
+
 .featured-intro { margin: 0 0 1.75rem; }
 .phases {
   list-style: none;
@@ -151,8 +157,8 @@ section[id] { scroll-margin-top: var(--nav-h); }
   position: absolute; top: 0; left: 0;
   width: 2rem; height: 2rem;
   border-radius: 50%;
-  background: var(--amber);
-  color: var(--dark-gray);
+  background: var(--accent);
+  color: var(--accent-ink);
   font-weight: 800;
   display: flex; align-items: center; justify-content: center;
 }
